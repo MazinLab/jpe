@@ -32,6 +32,22 @@ pub(crate) enum Module {
     Psm,
     Edm,
 }
+impl TryFrom<String> for Module {
+    type Error = Error;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        // The device spec uses ASCII
+        let s = s.to_ascii_lowercase();
+        match s {
+            _ if s.starts_with("cadm") => Ok(Self::Cadm),
+            _ if s.starts_with("rsm") => Ok(Self::Rsm),
+            _ if s.starts_with("oem") => Ok(Self::Oem),
+            _ if s.starts_with("psm") => Ok(Self::Psm),
+            _ if s.starts_with("edm") => Ok(Self::Edm),
+            _ => Err(Error::InvalidParams(format!("Unknown module: {}", s))),
+        }
+    }
+}
 
 /// The operation modes supported by the controller
 #[derive(Debug, Clone, PartialEq)]
@@ -146,7 +162,7 @@ impl BaseController {
         }
     }
     /// Polls the device to get the installed modules
-    fn get_modules(&mut self) -> BaseResult<String> {
+    fn get_modules(&mut self) -> BaseResult<()> {
         todo!()
     }
 }

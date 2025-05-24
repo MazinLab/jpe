@@ -7,6 +7,7 @@ const PARITY: Parity = Parity::None;
 const DATABITS: DataBits = DataBits::Eight;
 const FLOWCONTROL: FlowControl = FlowControl::None;
 const STOPBITS: StopBits = StopBits::One;
+const READ_BUF_SIZE: usize = 4096;
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -21,7 +22,7 @@ pub enum Error {
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 /// Reperesents the different types of Module supported by the controller
 pub(crate) enum Module {
     All,
@@ -107,10 +108,18 @@ pub struct BaseController {
     /// Firmware version of all modules
     fw_vers: String,
     ip_addr: Option<Ipv4Addr>,
+    /// Network connection handle (if using network)
+    net_conn: Option<()>, // Not sure which type this will be, based on UDP or TCP support.
+    /// Name of the serial port (if in serial mode)
     com_port: Option<String>,
+    /// Serial connection handle (if using serial)
     serial_conn: Option<Box<dyn SerialPort>>,
+    /// Device serial number
     serial_num: Option<String>,
     baud_rate: Option<u32>,
+    read_buffer: Vec<u8>,
+    /// Internal representation of the installed modules
+    modules: [Option<Module>; 6],
 }
 impl BaseController {
     fn new(
@@ -118,6 +127,7 @@ impl BaseController {
         ip_addr: Option<Ipv4Addr>,
         com_port: Option<String>,
         serial_conn: Option<Box<dyn SerialPort>>,
+        net_conn: Option<()>,
         serial_num: Option<String>,
         baud_rate: Option<u32>,
     ) -> Self {
@@ -128,9 +138,16 @@ impl BaseController {
             ip_addr,
             com_port,
             serial_conn,
+            net_conn,
             serial_num,
             baud_rate,
+            read_buffer: vec![0; READ_BUF_SIZE],
+            modules: [None; 6],
         }
+    }
+    /// Polls the device to get the installed modules
+    fn get_modules(&mut self) -> BaseResult<String> {
+        todo!()
     }
 }
 
@@ -138,6 +155,7 @@ impl BaseController {
 pub struct BaseControllerBuilder<T> {
     conn_mode: ConnMode,
     ip_addr: Option<Ipv4Addr>,
+    net_conn: Option<()>,
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
@@ -150,6 +168,7 @@ impl BaseControllerBuilder<Serial> {
             com_port,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
+            net_conn: None,
             serial_num,
             baud_rate: Some(baud_rate),
             _marker: PhantomData,
@@ -163,7 +182,7 @@ impl BaseControllerBuilder<Serial> {
             (None, Some(s)) => Self::walk_com_ports(s).ok_or(Error::DeviceNotFound)?,
             _ => {
                 return Err(Error::InvalidParams(
-                    "Need serial port or serial number to connec to device".to_string(),
+                    "Need serial port or serial number to connect to device".to_string(),
                 ));
             }
         };
@@ -177,7 +196,7 @@ impl BaseControllerBuilder<Serial> {
                 serialport::new(
                     port,
                     self.baud_rate
-                        .expect("Baud rate required to get to build method."),
+                        .expect("Baud rate required to get to serial build method."),
                 )
                 .data_bits(DATABITS)
                 .parity(PARITY)
@@ -185,6 +204,7 @@ impl BaseControllerBuilder<Serial> {
                 .stop_bits(STOPBITS)
                 .open()?,
             ),
+            self.net_conn,
             self.serial_num,
             self.baud_rate,
         ))
@@ -197,6 +217,6 @@ impl BaseControllerBuilder<Serial> {
 }
 impl BaseControllerBuilder<Network> {
     fn new() -> BaseController {
-        todo!()
+        todo!("Need to determine whether the controller supports TCP or UDP...")
     }
 }

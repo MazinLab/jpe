@@ -48,14 +48,26 @@ pub enum Response {
     CrLfDelimited(Vec<String>),
 }
 
+/// Higher level enum for supported modules
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ModuleScope {
+    Any,
+    Only(Vec<Module>),
+}
+/// Higher level enum for supported operation modes
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ModeScope {
+    Any,
+    Only(Vec<ControllerOpMode>),
+}
 /// The command type that the base controller API expects
 /// for dispatch and response routing.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Command {
-    /// Modules that support this command. None implies a global command.
-    pub(crate) AllowedModule: Option<Vec<Module>>,
-    /// Controller operation modes that support this command. None implies a global command.
-    pub(crate) AllowedMode: Option<Vec<ControllerOpMode>>,
+    /// Modules that support this command
+    pub(crate) AllowedModule: ModuleScope,
+    /// Controller operation modes that support this command
+    pub(crate) AllowedMode: ModeScope,
     pub(crate) Payload: String,
     pub(crate) RespType: Response,
 }

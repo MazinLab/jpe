@@ -1,6 +1,21 @@
 // Defines types and functionality related to the base controller
-use serialport::SerialPort;
+use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
 use std::{marker::PhantomData, net::Ipv4Addr};
+use thiserror::Error;
+
+const PARITY: Parity = Parity::None;
+const DATABITS: DataBits = DataBits::Eight;
+const FLOWCONTROL: FlowControl = FlowControl::None;
+const STOPBITS: StopBits = StopBits::One;
+
+/// Errors for the base controller api
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("{0}")]
+    Serial(#[from] serialport::Error),
+}
+
+pub type BaseResult<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Clone, PartialEq)]
 /// Reperesents the different types of Module supported by the controller
@@ -115,6 +130,7 @@ impl BaseController {
     }
 }
 
+/// Type-State Builder for the Controller type based on connection mode.
 pub struct BaseControllerBuilder<T> {
     conn_mode: ConnMode,
     ip_addr: Option<Ipv4Addr>,
@@ -123,11 +139,23 @@ pub struct BaseControllerBuilder<T> {
     serial_num: Option<String>,
     baud_rate: Option<u16>,
     /// Used since we don't care about using T in the type
-    _phantom: PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 
 impl BaseControllerBuilder<Serial> {
-    fn new() -> BaseController {
+    fn new(com_port: Option<String>, serial_num: Option<String>, baud_rate: u16) -> Self {
+        Self {
+            com_port,
+            conn_mode: ConnMode::Serial,
+            ip_addr: None,
+            serial_num,
+            serial_conn: None,
+            baud_rate: Some(baud_rate),
+            _marker: PhantomData,
+        }
+    }
+    /// Builds the controller type and tries to connect over serial.
+    fn build(mut self) -> Result<BaseController, Error> {
         todo!()
     }
 }

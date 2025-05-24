@@ -3,6 +3,7 @@
 #[derive(Debug, Clone, PartialEq)]
 /// Reperesents the different types of Module supported by the controller
 pub(crate) enum Module {
+    All,
     Cadm,
     Rsm,
     Oem,
@@ -45,4 +46,16 @@ pub enum Response {
     Error(String),
     CommaDelimited(Vec<String>),
     CrLfDelimited(Vec<String>),
+}
+
+/// The command type that the base controller API expects
+/// for dispatch and response routing.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Command {
+    /// Modules that support this command. None implies a global command.
+    pub(crate) AllowedModule: Option<Vec<Module>>,
+    /// Controller operation modes that support this command. None implies a global command.
+    pub(crate) AllowedMode: Option<Vec<ControllerOpMode>>,
+    pub(crate) Payload: String,
+    pub(crate) RespType: Response,
 }

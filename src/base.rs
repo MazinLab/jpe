@@ -13,6 +13,10 @@ const STOPBITS: StopBits = StopBits::One;
 pub enum Error {
     #[error("{0}")]
     Serial(#[from] serialport::Error),
+    #[error("")]
+    DeviceNotFound,
+    #[error("{0}")]
+    InvalidParams(String),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -106,7 +110,7 @@ pub struct BaseController {
     com_port: Option<String>,
     serial_conn: Option<Box<dyn SerialPort>>,
     serial_num: Option<String>,
-    baud_rate: Option<u16>,
+    baud_rate: Option<u32>,
 }
 impl BaseController {
     fn new(
@@ -115,7 +119,7 @@ impl BaseController {
         com_port: Option<String>,
         serial_conn: Option<Box<dyn SerialPort>>,
         serial_num: Option<String>,
-        baud_rate: Option<u16>,
+        baud_rate: Option<u32>,
     ) -> Self {
         Self {
             conn_mode,
@@ -135,27 +139,59 @@ pub struct BaseControllerBuilder<T> {
     conn_mode: ConnMode,
     ip_addr: Option<Ipv4Addr>,
     com_port: Option<String>,
-    serial_conn: Option<Box<dyn SerialPort>>,
     serial_num: Option<String>,
-    baud_rate: Option<u16>,
+    baud_rate: Option<u32>,
     /// Used since we don't care about using T in the type
     _marker: PhantomData<T>,
 }
-
 impl BaseControllerBuilder<Serial> {
-    fn new(com_port: Option<String>, serial_num: Option<String>, baud_rate: u16) -> Self {
+    pub fn new(com_port: Option<String>, serial_num: Option<String>, baud_rate: u32) -> Self {
         Self {
             com_port,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
             serial_num,
-            serial_conn: None,
             baud_rate: Some(baud_rate),
             _marker: PhantomData,
         }
     }
     /// Builds the controller type and tries to connect over serial.
-    fn build(mut self) -> Result<BaseController, Error> {
+    pub fn build(self) -> BaseResult<BaseController> {
+        // Try and find the serial port that the device is connected
+        let port = match (self.com_port.as_ref(), self.serial_num.as_ref()) {
+            (Some(c), _) => c.clone(),
+            (None, Some(s)) => Self::walk_com_ports(s).ok_or(Error::DeviceNotFound)?,
+            _ => {
+                return Err(Error::InvalidParams(
+                    "Need serial port or serial number to connec to device".to_string(),
+                ));
+            }
+        };
+
+        // Try to bind to a serial port handle and return newly built instance
+        Ok(BaseController::new(
+            self.conn_mode,
+            self.ip_addr,
+            self.com_port,
+            Some(
+                serialport::new(
+                    port,
+                    self.baud_rate
+                        .expect("Baud rate required to get to build method."),
+                )
+                .data_bits(DATABITS)
+                .parity(PARITY)
+                .flow_control(FLOWCONTROL)
+                .stop_bits(STOPBITS)
+                .open()?,
+            ),
+            self.serial_num,
+            self.baud_rate,
+        ))
+    }
+    /// Walks available serial ports and tries to find the device based on the
+    /// given serial number.
+    fn walk_com_ports(serial_num: &str) -> Option<String> {
         todo!()
     }
 }

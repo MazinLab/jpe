@@ -1,4 +1,6 @@
 // Defines types and functionality related to the base controller
+use serialport::SerialPort;
+use std::{marker::PhantomData, net::Ipv4Addr};
 
 #[derive(Debug, Clone, PartialEq)]
 /// Reperesents the different types of Module supported by the controller
@@ -10,9 +12,6 @@ pub(crate) enum Module {
     Psm,
     Edm,
 }
-/// Abstract, central representation of the Controller
-#[derive(Debug, Clone, PartialEq)]
-pub struct BaseController {}
 
 /// The operation modes supported by the controller
 #[derive(Debug, Clone, PartialEq)]
@@ -22,8 +21,17 @@ pub enum ControllerOpMode {
     Flexdrive,
 }
 
-/// Connection mode to the controller
-#[derive(Debug, Clone)]
+/// Serial connection mode to the controller. Used in type-state-builder
+/// pattern for controller creation
+#[derive(Debug, Clone, PartialEq)]
+struct Serial;
+/// Network connection mode to the controller. Used in type-state-builder
+/// pattern for controller creation
+#[derive(Debug, Clone, PartialEq)]
+struct Network;
+/// Connection mode to the controller. Used internally by the controller
+/// base API.
+#[derive(Debug, Clone, PartialEq)]
 enum ConnMode {
     Serial,
     Network,
@@ -65,9 +73,66 @@ pub(crate) enum ModeScope {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Command {
     /// Modules that support this command
-    pub(crate) AllowedModule: ModuleScope,
+    pub(crate) allowed_module: ModuleScope,
     /// Controller operation modes that support this command
-    pub(crate) AllowedMode: ModeScope,
-    pub(crate) Payload: String,
-    pub(crate) RespType: Response,
+    pub(crate) allowed_mode: ModeScope,
+    pub(crate) payload: String,
+    pub(crate) resp_type: Response,
+}
+
+/// Abstract, central representation of the Controller
+#[derive(Debug)]
+pub struct BaseController {
+    conn_mode: ConnMode,
+    op_mode: ControllerOpMode,
+    /// Firmware version of all modules
+    fw_vers: String,
+    ip_addr: Option<Ipv4Addr>,
+    com_port: Option<String>,
+    serial_conn: Option<Box<dyn SerialPort>>,
+    serial_num: Option<String>,
+    baud_rate: Option<u16>,
+}
+impl BaseController {
+    fn new(
+        conn_mode: ConnMode,
+        ip_addr: Option<Ipv4Addr>,
+        com_port: Option<String>,
+        serial_conn: Option<Box<dyn SerialPort>>,
+        serial_num: Option<String>,
+        baud_rate: Option<u16>,
+    ) -> Self {
+        Self {
+            conn_mode,
+            op_mode: ControllerOpMode::Basedrive,
+            fw_vers: "".to_string(),
+            ip_addr,
+            com_port,
+            serial_conn,
+            serial_num,
+            baud_rate,
+        }
+    }
+}
+
+pub struct BaseControllerBuilder<T> {
+    conn_mode: ConnMode,
+    ip_addr: Option<Ipv4Addr>,
+    com_port: Option<String>,
+    serial_conn: Option<Box<dyn SerialPort>>,
+    serial_num: Option<String>,
+    baud_rate: Option<u16>,
+    /// Used since we don't care about using T in the type
+    _phantom: PhantomData<T>,
+}
+
+impl BaseControllerBuilder<Serial> {
+    fn new() -> BaseController {
+        todo!()
+    }
+}
+impl BaseControllerBuilder<Network> {
+    fn new() -> BaseController {
+        todo!()
+    }
 }

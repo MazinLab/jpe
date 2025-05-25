@@ -52,6 +52,25 @@ pub enum Error {
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
 
+#[derive(Debug, Clone, PartialEq)]
+/// Supported address assignment mode for the controller.
+pub enum IpAddrMode {
+    Dhcp,
+    Static,
+}
+impl TryFrom<&str> for IpAddrMode {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s.to_ascii_lowercase() {
+            _ if s == "dhcp" => Ok(Self::Dhcp),
+            _ if s == "static" => Ok(Self::Static),
+            _ => Err(Error::InvalidParams(
+                "Invalid addressing mode, only DHCP or Static supported".to_string(),
+            )),
+        }
+    }
+}
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Reperesents the different types of Module supported by the controller
 pub(crate) enum Module {
@@ -384,7 +403,7 @@ impl BaseController {
             }
         }
     }
-    /// Returns the firmware version of the controller
+    /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {
             Ok(self.fw_vers.clone())
@@ -398,7 +417,7 @@ impl BaseController {
             Ok(v.remove(0))
         }
     }
-    /// Returns a list of all installed modules
+    /// Returns a list of all installed modules and updates internal module container
     pub fn get_module_list(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "MODLIST");
         let v = self.handle_command(&cmd, Some(6))?;
@@ -420,10 +439,45 @@ impl BaseController {
         Ok(self.handle_command(&cmd, None)?)
     }
     /// Returns IP configuration for the LAN interface.
-    /// [MODE],[IP address],[Subnet Mask],[Gateway],[MAC Address]
+    /// Response: [MODE],[IP address],[Subnet Mask],[Gateway],[MAC Address]
     pub fn get_ip_config(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "IPR");
         Ok(self.handle_command(&cmd, Some(5))?)
+    }
+    /// Sets the IP configuration for the LAN interface
+    pub fn set_ip_config(
+        &mut self,
+        addr_mode: IpAddrMode,
+        ip_addr: Ipv4Addr,
+        mask: Ipv4Addr,
+        gateway: Ipv4Addr,
+    ) -> BaseResult<String> {
+        let cmd = match addr_mode {
+            IpAddrMode::Dhcp => Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                format!(
+                    "{} {} {} {} {}",
+                    "IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
+                )
+                .as_str(),
+            ),
+            IpAddrMode::Static => Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                format!(
+                    "{} {} {} {} {}",
+                    "IPS",
+                    "STATIC",
+                    ip_addr.to_string(),
+                    mask.to_string(),
+                    gateway.to_string()
+                )
+                .as_str(),
+            ),
+        };
+        let mut v = self.handle_command(&cmd, Some(1))?;
+        Ok(v.remove(0))
     }
 }
 

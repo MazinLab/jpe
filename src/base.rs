@@ -25,6 +25,7 @@ const DEVICE_PID: u16 = 0000;
 const TERMINATOR: char = '\r';
 // Used at the start of every Command
 const MARKER: char = '/';
+const BAUD_BOUNDS: (u32, u32) = (9600, 1_000_000);
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -45,6 +46,8 @@ pub enum Error {
     General(String),
     #[error("max_len: {}, idx: {}", max_len, idx)]
     BufOverflow { max_len: usize, idx: usize },
+    #[error("{0}")]
+    Bound(String),
     #[error("{0}")]
     Utf8(#[from] Utf8Error),
     #[error("{0}")]
@@ -509,6 +512,30 @@ impl BaseController {
         };
         let mut v = self.handle_command(&cmd, Some(1))?;
         Ok(v.remove(0).parse()?)
+    }
+    /// Set the baudrate for the USB or RS-422 interface on the controller.
+    pub fn set_baud_rate(&mut self, ifc: SerialInterface, baud: u32) -> BaseResult<String> {
+        if baud >= BAUD_BOUNDS.0 && baud <= BAUD_BOUNDS.1 {
+            let cmd = match ifc {
+                SerialInterface::Rs422 => Command::new(
+                    ModuleScope::Any,
+                    ModeScope::Any,
+                    format!("SBR RS422 {}", baud).as_str(),
+                ),
+                SerialInterface::Usb => Command::new(
+                    ModuleScope::Any,
+                    ModeScope::Any,
+                    format!("SBR USB {}", baud).as_str(),
+                ),
+            };
+            let mut v = self.handle_command(&cmd, Some(1))?;
+            Ok(v.remove(0))
+        } else {
+            Err(Error::Bound(format!(
+                "Out of range for baudrate: {}-{}, got {}",
+                BAUD_BOUNDS.0, BAUD_BOUNDS.1, baud
+            )))
+        }
     }
 }
 

@@ -3,6 +3,7 @@ use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
+    fmt::Display,
     io::{self, ErrorKind},
     marker::PhantomData,
     net::Ipv4Addr,
@@ -155,6 +156,37 @@ pub enum Slot {
     Four,
     Five,
     Six,
+}
+impl TryFrom<String> for Slot {
+    type Error = Error;
+
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        match s.to_ascii_lowercase() {
+            _ if s == "one" || s == "1" => Ok(Self::One),
+            _ if s == "two" || s == "2" => Ok(Self::Two),
+            _ if s == "three" || s == "3" => Ok(Self::Three),
+            _ if s == "four" || s == "4" => Ok(Self::Four),
+            _ if s == "five" || s == "5" => Ok(Self::Five),
+            _ if s == "six" || s == "6" => Ok(Self::Six),
+            _ => Err(Error::InvalidParams(format!(
+                "Supported slots are 1 - 6 or one-six, got {}",
+                s
+            ))),
+        }
+    }
+}
+impl Display for Slot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Slot::One => "1",
+            Slot::Two => "2",
+            Slot::Three => "3",
+            Slot::Four => "4",
+            Slot::Five => "5",
+            Slot::Six => "6",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 /// The response type expected for a given Command

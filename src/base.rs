@@ -269,7 +269,7 @@ pub struct BaseController {
 // ======= Internal API =======
 impl BaseController {
     /// Checks whether a command is valid given the current state of the hardware
-    fn check_command(&self, cmd: &Command, slot: Slot) -> bool {
+    fn check_command(&self, cmd: &Command, slot: Option<Slot>) -> bool {
         let opmode_check = match &cmd.allowed_mode {
             ModeScope::Any => true,
             ModeScope::Only(modes) => modes.contains(&self.op_mode),
@@ -281,12 +281,27 @@ impl BaseController {
                 // supported modules for this command.
                 // This is a bit ugly, may need to refactor for readability.
                 match slot {
-                    Slot::One if matches!(self.modules[0], Some(m) if mods.contains(&m)) => true,
-                    Slot::Two if matches!(self.modules[1], Some(m) if mods.contains(&m)) => true,
-                    Slot::Three if matches!(self.modules[2], Some(m) if mods.contains(&m)) => true,
-                    Slot::Four if matches!(self.modules[3], Some(m) if mods.contains(&m)) => true,
-                    Slot::Five if matches!(self.modules[4], Some(m) if mods.contains(&m)) => true,
-                    Slot::Six if matches!(self.modules[5], Some(m) if mods.contains(&m)) => true,
+                    Some(Slot::One) if matches!(self.modules[0], Some(m) if mods.contains(&m)) => {
+                        true
+                    }
+                    Some(Slot::Two) if matches!(self.modules[1], Some(m) if mods.contains(&m)) => {
+                        true
+                    }
+                    Some(Slot::Three) if matches!(self.modules[2], Some(m) if mods.contains(&m)) => {
+                        true
+                    }
+                    Some(Slot::Four) if matches!(self.modules[3], Some(m) if mods.contains(&m)) => {
+                        true
+                    }
+                    Some(Slot::Five) if matches!(self.modules[4], Some(m) if mods.contains(&m)) => {
+                        true
+                    }
+                    Some(Slot::Six) if matches!(self.modules[5], Some(m) if mods.contains(&m)) => {
+                        true
+                    }
+                    // This case should never match (None should only be paired with the Any case),
+                    // but returning true if so.
+                    None => true,
                     _ => false,
                 }
             }
@@ -450,7 +465,14 @@ impl BaseController {
         &mut self,
         cmd: &Command,
         n_resp_vals: Option<usize>,
+        slot: Option<Slot>,
     ) -> BaseResult<Vec<String>> {
+        // Check to verify if command is valid
+        if !self.check_command(cmd, slot) {
+            return Err(Error::InvalidParams(
+                "Invalid command for current controller state".to_string(),
+            ));
+        }
         let resp = self.comm_handler(&cmd)?;
         match resp {
             Response::Error(s) => Err(Error::DeviceError(s)),
@@ -481,21 +503,21 @@ impl BaseController {
             let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "VER");
             // Extract, set, and return value. Direct indexing safe due to bounds check by the handle command
             // method.
-            let mut v = self.handle_command(&cmd, Some(1))?;
+            let mut v = self.handle_command(&cmd, Some(1), None)?;
             self.fw_vers = v[0].clone();
             Ok(v.remove(0))
         }
     }
     /// Returns firmware version information of module in given slot. Returns None if slot is empty.
     pub fn get_mod_fw_version(&mut self, slot: Slot) -> BaseResult<Option<String>> {
-        let idx = u8::from(slot) as usize;
-        if self.modules[idx].is_some() {
+        let idx = u8::from(slot.clone()) as usize;
+        if self.modules[idx - 1].is_some() {
             let cmd = Command::new(
                 ModuleScope::Any,
                 ModeScope::Any,
                 format!("FIV {}", idx).as_str(),
             );
-            let mut v = self.handle_command(&cmd, Some(1))?;
+            let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
             Ok(Some(v.remove(0)))
         } else {
             Ok(None)
@@ -504,7 +526,7 @@ impl BaseController {
     /// Returns a list of all installed modules and updates internal module container
     pub fn get_module_list(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "MODLIST");
-        let v = self.handle_command(&cmd, Some(6))?;
+        let v = self.handle_command(&cmd, Some(6), None)?;
 
         // Iterate over the internal module collection and update with new values
         // from the controller. The modules in the interim vector above are guaranteed to be valid modules due to early return.
@@ -520,13 +542,13 @@ impl BaseController {
     /// Returns a list of supported actuator and stage types
     pub fn get_supported_stages(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "STAGES");
-        Ok(self.handle_command(&cmd, None)?)
+        Ok(self.handle_command(&cmd, None, None)?)
     }
     /// Returns IP configuration for the LAN interface.
     /// Response: [MODE],[IP address],[Subnet Mask],[Gateway],[MAC Address]
     pub fn get_ip_config(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "IPR");
-        Ok(self.handle_command(&cmd, Some(5))?)
+        Ok(self.handle_command(&cmd, Some(5), None)?)
     }
     /// Sets the IP configuration for the LAN interface
     pub fn set_ip_config(
@@ -560,7 +582,7 @@ impl BaseController {
                 .as_str(),
             ),
         };
-        let mut v = self.handle_command(&cmd, Some(1))?;
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
         Ok(v.remove(0))
     }
     /// Get baudrate setting for the USB or RS-422 interface
@@ -569,7 +591,7 @@ impl BaseController {
             SerialInterface::Rs422 => Command::new(ModuleScope::Any, ModeScope::Any, "GBR RS422"),
             SerialInterface::Usb => Command::new(ModuleScope::Any, ModeScope::Any, "GBR USB"),
         };
-        let mut v = self.handle_command(&cmd, Some(1))?;
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
         Ok(v.remove(0).parse()?)
     }
     /// Set the baudrate for the USB or RS-422 interface on the controller.
@@ -587,7 +609,7 @@ impl BaseController {
                     format!("SBR USB {}", baud).as_str(),
                 ),
             };
-            let mut v = self.handle_command(&cmd, Some(1))?;
+            let mut v = self.handle_command(&cmd, Some(1), None)?;
             Ok(v.remove(0))
         } else {
             Err(Error::Bound(format!(
@@ -601,14 +623,14 @@ impl BaseController {
     /// TODO: Figure out how handle the response; the controller will respond only
     /// once the firmware is fully updated (long time.)
     pub fn start_mod_fw_update(&mut self, fname: &str, slot: Slot) -> BaseResult<()> {
-        let slot = u8::from(slot) as usize;
-        if self.modules[slot - 1].is_some() {
+        let idx = u8::from(slot.clone()) as usize;
+        if self.modules[idx - 1].is_some() {
             let cmd = Command::new(
                 ModuleScope::Any,
                 ModeScope::Any,
                 format!("FU {} {}", slot, fname).as_str(),
             );
-            let _ = self.handle_command(&cmd, None)?;
+            let _ = self.handle_command(&cmd, None, Some(slot))?;
             Ok(())
         } else {
             Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
@@ -616,14 +638,14 @@ impl BaseController {
     }
     /// Get the fail-safe state of the CADM2 module.
     pub fn get_fail_safe_state(&mut self, slot: Slot) -> BaseResult<String> {
-        let slot = u8::from(slot) as usize;
-        if self.modules[slot - 1].is_some() {
+        let idx = u8::from(slot.clone()) as usize;
+        if self.modules[idx - 1].is_some() {
             let cmd = Command::new(
                 ModuleScope::Only(vec![Module::Cadm]),
                 ModeScope::Any,
                 format!("GFS {}", slot).as_str(),
             );
-            let mut v = self.handle_command(&cmd, Some(1))?;
+            let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
             Ok(v.remove(0))
         } else {
             Err(Error::InvalidParams(format!("Slot {} is empty", slot)))

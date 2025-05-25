@@ -142,10 +142,19 @@ pub(crate) enum ModeScope {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Command {
     /// Modules that support this command
-    pub(crate) allowed_module: ModuleScope,
+    pub(crate) allowed_mod: ModuleScope,
     /// Controller operation modes that support this command
     pub(crate) allowed_mode: ModeScope,
     pub(crate) payload: String,
+}
+impl Command {
+    pub(crate) fn new(allowed_mod: ModuleScope, allowed_mode: ModeScope, payload: &str) -> Self {
+        Self {
+            allowed_mod,
+            allowed_mode,
+            payload: format!("{}{}{}", MARKER, payload.to_string(), TERMINATOR),
+        }
+    }
 }
 
 /// Abstract, central representation of the Controller
@@ -178,7 +187,7 @@ impl BaseController {
             ModeScope::Any => true,
             ModeScope::Only(modes) => modes.contains(&self.op_mode),
         };
-        let mod_check = match &cmd.allowed_module {
+        let mod_check = match &cmd.allowed_mod {
             ModuleScope::Any => true,
             ModuleScope::Only(mods) => {
                 // Check which module is in the given slot and check if it's in the list of
@@ -352,7 +361,8 @@ impl BaseController {
             modules: [None; 6],
         }
     }
-    /// Handler to abstract the boilerplate used in most command methods.
+    /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
+    /// for the use of direct indexing into the resulting return value as a result.
     fn handle_command(&mut self, cmd: &Command, n_resp_vals: usize) -> BaseResult<Vec<String>> {
         let resp = self.comm_handler(&cmd)?;
         match resp {
@@ -376,13 +386,11 @@ impl BaseController {
             Ok(self.fw_vers.clone())
         } else {
             // Build Command and send to controller
-            let cmd = Command {
-                allowed_module: ModuleScope::Any,
-                allowed_mode: ModeScope::Any,
-                payload: format!("{}VER{}", MARKER, TERMINATOR),
-            };
+            let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "VER");
+            // Extract, set, and return value.
             let mut v = self.handle_command(&cmd, 1)?;
-            Ok(v.pop().expect("Existence check performed earlier"))
+            self.fw_vers = v[0].clone();
+            Ok(v.remove(0))
         }
     }
 }

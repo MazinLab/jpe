@@ -89,7 +89,7 @@ struct Network;
 /// Connection mode to the controller. Used internally by the controller
 /// base API.
 #[derive(Debug, Clone, PartialEq)]
-enum ConnMode {
+pub(crate) enum ConnMode {
     Serial,
     Network,
 }
@@ -215,7 +215,7 @@ impl BaseController {
         mod_check && opmode_check
     }
     /// Parses a response in read buffer and returns the result
-    fn parse_response(&self, cmd: &Command, bytes_read: usize) -> BaseResult<Response> {
+    fn parse_response(&self, bytes_read: usize) -> BaseResult<Response> {
         // First, make sure index into the buffer is valid, then try to convert
         // from bytes to &str since all bytes should be ASCII.
         let msg = std::str::from_utf8(self.read_buffer.get(..bytes_read).ok_or(

@@ -6,7 +6,7 @@ use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
     net::Ipv4Addr,
-    str::{FromStr, Utf8Error},
+    str::Utf8Error,
     time::{Duration, Instant},
 };
 use thiserror::Error;
@@ -20,6 +20,7 @@ const READ_BUF_SIZE: usize = 4096;
 const READ_CHUNK_SIZE: usize = 64;
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
+const TERMINATOR: char = '\r';
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -165,34 +166,8 @@ pub struct BaseController {
     /// Internal representation of the installed modules
     modules: [Option<Module>; 6],
 }
+// ======= Internal API =======
 impl BaseController {
-    fn new(
-        conn_mode: ConnMode,
-        ip_addr: Option<Ipv4Addr>,
-        com_port: Option<String>,
-        serial_conn: Option<Box<dyn SerialPort>>,
-        net_conn: Option<()>,
-        serial_num: Option<String>,
-        baud_rate: Option<u32>,
-    ) -> Self {
-        Self {
-            conn_mode,
-            op_mode: ControllerOpMode::Basedrive,
-            fw_vers: "".to_string(),
-            ip_addr,
-            com_port,
-            serial_conn,
-            net_conn,
-            serial_num,
-            baud_rate,
-            read_buffer: vec![0; READ_BUF_SIZE],
-            modules: [None; 6],
-        }
-    }
-    /// Polls the device to get the installed modules
-    fn get_modules(&mut self) -> BaseResult<()> {
-        todo!()
-    }
     /// Checks whether a command is valid given the current state of the hardware
     fn check_command(&self, cmd: &Command, slot: Slot) -> bool {
         let opmode_check = match &cmd.allowed_mode {
@@ -232,7 +207,7 @@ impl BaseController {
         // Error case returns early
         if msg.starts_with("Error") {
             return Ok(Response::Error(
-                msg.strip_suffix('\r')
+                msg.strip_suffix(TERMINATOR)
                     .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
                     .to_string(),
             ));
@@ -240,16 +215,16 @@ impl BaseController {
 
         // Comma-delimited case when there is only one carriage return in the
         // non Error path. More than one, the CrDelimited (bug) case
-        match msg.chars().filter(|c| *c == '\r').count() {
+        match msg.chars().filter(|c| *c == TERMINATOR).count() {
             1 => Ok(Response::CommaDelimited(
-                msg.strip_suffix('\r')
+                msg.strip_suffix(TERMINATOR)
                     .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
                     .split(|c| c == ',')
                     .map(|slice| slice.to_string())
                     .collect(),
             )),
             _ => Ok(Response::CrDelimited(
-                msg.strip_suffix('\r')
+                msg.strip_suffix(TERMINATOR)
                     .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
                     .split(|c| c == '\r')
                     .map(|slice| slice.to_string())
@@ -316,6 +291,38 @@ impl BaseController {
         // Clear the input buffer of any residual junk and return bytes read
         reader.clear(serialport::ClearBuffer::Input)?;
         Ok(total_bytes_read)
+    }
+
+    /// Polls the device to get the installed modules
+    fn get_modules(&mut self) -> BaseResult<()> {
+        todo!()
+    }
+}
+
+// ======= External API =======
+impl BaseController {
+    fn new(
+        conn_mode: ConnMode,
+        ip_addr: Option<Ipv4Addr>,
+        com_port: Option<String>,
+        serial_conn: Option<Box<dyn SerialPort>>,
+        net_conn: Option<()>,
+        serial_num: Option<String>,
+        baud_rate: Option<u32>,
+    ) -> Self {
+        Self {
+            conn_mode,
+            op_mode: ControllerOpMode::Basedrive,
+            fw_vers: "".to_string(),
+            ip_addr,
+            com_port,
+            serial_conn,
+            net_conn,
+            serial_num,
+            baud_rate,
+            read_buffer: vec![0; READ_BUF_SIZE],
+            modules: [None; 6],
+        }
     }
 }
 

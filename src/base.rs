@@ -299,7 +299,7 @@ impl BaseController {
                     Some(Slot::Six) if matches!(self.modules[5], Some(m) if mods.contains(&m)) => {
                         true
                     }
-                    // This case should never match (None should only be paired with the Any case),
+                    // This case should never match (None in slot should only be paired with the Any case),
                     // but returning true if so.
                     None => true,
                     _ => false,
@@ -529,7 +529,7 @@ impl BaseController {
         let v = self.handle_command(&cmd, Some(6), None)?;
 
         // Iterate over the internal module collection and update with new values
-        // from the controller. The modules in the interim vector above are guaranteed to be valid modules due to early return.
+        // from the controller. The modules in the interim vector below are guaranteed to be valid modules due to early return.
         // Length is also guaranteed to be correct due to command handler method.
         v.iter()
             .map(|mod_str| Module::try_from(mod_str.clone()))

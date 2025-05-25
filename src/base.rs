@@ -596,6 +596,24 @@ impl BaseController {
             )))
         }
     }
+    /// Instructs a module to update its firmware based. Firmware must be uploaded
+    /// to the controller via the web interface and must match the passed filename.
+    /// TODO: Figure out how handle the response; the controller will respond only
+    /// once the firmware is fully updated (long time.)
+    pub fn start_mod_fw_update(&mut self, fname: &str, slot: Slot) -> BaseResult<()> {
+        let slot = u8::from(slot) as usize;
+        if self.modules[slot].is_some() {
+            let cmd = Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                format!("FU {} {}", slot, fname).as_str(),
+            );
+            let _ = self.handle_command(&cmd, None)?;
+            Ok(())
+        } else {
+            Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
+        }
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

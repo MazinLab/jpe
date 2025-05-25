@@ -46,6 +46,8 @@ pub enum Error {
     BufOverflow { max_len: usize, idx: usize },
     #[error("{0}")]
     Utf8(#[from] Utf8Error),
+    #[error("{0}")]
+    DeviceError(String),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -144,7 +146,6 @@ pub(crate) struct Command {
     /// Controller operation modes that support this command
     pub(crate) allowed_mode: ModeScope,
     pub(crate) payload: String,
-    pub(crate) resp_type: Response,
 }
 
 /// Abstract, central representation of the Controller
@@ -352,12 +353,31 @@ impl BaseController {
         }
     }
     /// Returns the firmware version of the controller
-    pub fn get_fw_version(&self) -> BaseResult<String> {
+    pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {
             Ok(self.fw_vers.clone())
         } else {
-            // Build Command
-            todo!()
+            // Build Command and send to controller
+            let cmd = Command {
+                allowed_module: ModuleScope::Any,
+                allowed_mode: ModeScope::Any,
+                payload: format!("{}VER{}", MARKER, TERMINATOR),
+            };
+            let resp = self.comm_handler(&cmd)?;
+            match resp {
+                Response::Error(s) => Err(Error::DeviceError(s)),
+                Response::CrDelimited(mut v) | Response::CommaDelimited(mut v) => {
+                    if v.len() != 1 {
+                        return Err(Error::InvalidResponse(format!(
+                            "Expected {} values, got {}",
+                            1,
+                            v.len()
+                        )));
+                    } else {
+                        return Ok(v.pop().expect("Existence check performed earlier."));
+                    }
+                }
+            }
         }
     }
 }

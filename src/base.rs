@@ -18,6 +18,8 @@ pub enum Error {
     DeviceNotFound,
     #[error("{0}")]
     InvalidParams(String),
+    #[error("{0}")]
+    InvalidResponse(String),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -89,7 +91,6 @@ pub enum Slot {
 pub enum Response {
     Error(String),
     CommaDelimited(Vec<String>),
-    CrLfDelimited(Vec<String>),
 }
 
 /// Higher level enum for supported modules
@@ -189,6 +190,10 @@ impl BaseController {
             }
         };
         mod_check && opmode_check
+    }
+    /// Parses a response and returns the reesult
+    fn parse_response(&self, cmd: &Command) -> BaseResult<Response> {
+        todo!()
     }
 }
 

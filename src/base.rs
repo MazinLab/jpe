@@ -239,7 +239,7 @@ impl Command {
         Self {
             allowed_mod,
             allowed_mode,
-            payload: format!("{}{}{}", MARKER, payload.to_string(), TERMINATOR),
+            payload: format!("{}{}{}", MARKER, payload, TERMINATOR),
         }
     }
 }
@@ -602,7 +602,7 @@ impl BaseController {
     /// once the firmware is fully updated (long time.)
     pub fn start_mod_fw_update(&mut self, fname: &str, slot: Slot) -> BaseResult<()> {
         let slot = u8::from(slot) as usize;
-        if self.modules[slot].is_some() {
+        if self.modules[slot - 1].is_some() {
             let cmd = Command::new(
                 ModuleScope::Any,
                 ModeScope::Any,
@@ -610,6 +610,21 @@ impl BaseController {
             );
             let _ = self.handle_command(&cmd, None)?;
             Ok(())
+        } else {
+            Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
+        }
+    }
+    /// Get the fail-safe state of the CADM2 module.
+    pub fn get_fail_safe_state(&mut self, slot: Slot) -> BaseResult<String> {
+        let slot = u8::from(slot) as usize;
+        if self.modules[slot - 1].is_some() {
+            let cmd = Command::new(
+                ModuleScope::Only(vec![Module::Cadm]),
+                ModeScope::Any,
+                format!("GFS {}", slot).as_str(),
+            );
+            let mut v = self.handle_command(&cmd, Some(1))?;
+            Ok(v.remove(0))
         } else {
             Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
         }

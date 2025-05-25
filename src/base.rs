@@ -419,6 +419,12 @@ impl BaseController {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "STAGES");
         Ok(self.handle_command(&cmd, None)?)
     }
+    /// Returns IP configuration for the LAN interface.
+    /// [MODE],[IP address],[Subnet Mask],[Gateway],[MAC Address]
+    pub fn get_ip_config(&mut self) -> BaseResult<Vec<String>> {
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "IPR");
+        Ok(self.handle_command(&cmd, Some(5))?)
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

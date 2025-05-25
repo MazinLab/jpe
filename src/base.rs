@@ -358,17 +358,26 @@ impl BaseController {
     }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
     /// for the use of direct indexing into the resulting return value as a result.
-    fn handle_command(&mut self, cmd: &Command, n_resp_vals: usize) -> BaseResult<Vec<String>> {
+    fn handle_command(
+        &mut self,
+        cmd: &Command,
+        n_resp_vals: Option<usize>,
+    ) -> BaseResult<Vec<String>> {
         let resp = self.comm_handler(&cmd)?;
         match resp {
             Response::Error(s) => Err(Error::DeviceError(s)),
             Response::CrDelimited(v) | Response::CommaDelimited(v) => {
-                if v.len() != n_resp_vals {
-                    return Err(Error::InvalidResponse(format!(
-                        "Expected {} values, got {}",
-                        n_resp_vals,
-                        v.len()
-                    )));
+                // None in expected return vals implies it can be variable, return as-is.
+                if let Some(n_vals) = n_resp_vals {
+                    if v.len() != n_vals {
+                        return Err(Error::InvalidResponse(format!(
+                            "Expected {} values, got {}",
+                            n_vals,
+                            v.len()
+                        )));
+                    } else {
+                        Ok(v)
+                    }
                 } else {
                     return Ok(v);
                 }
@@ -384,15 +393,15 @@ impl BaseController {
             let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "VER");
             // Extract, set, and return value. Direct indexing safe due to bounds check by the handle command
             // method.
-            let mut v = self.handle_command(&cmd, 1)?;
+            let mut v = self.handle_command(&cmd, Some(1))?;
             self.fw_vers = v[0].clone();
             Ok(v.remove(0))
         }
     }
-    /// Returns the modules installed in the system.
+    /// Returns a list of all installed modules
     pub fn get_module_list(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "MODLIST");
-        let v = self.handle_command(&cmd, 6)?;
+        let v = self.handle_command(&cmd, Some(6))?;
 
         // Iterate over the internal module collection and update with new values
         // from the controller. The modules in the interim vector above are guaranteed to be valid modules due to early return.
@@ -404,6 +413,11 @@ impl BaseController {
             .enumerate()
             .for_each(|(idx, new_mod)| self.modules[idx] = Some(new_mod.clone()));
         Ok(v)
+    }
+    /// Returns a list of supported actuator and stage types
+    pub fn get_supported_stages(&mut self) -> BaseResult<Vec<String>> {
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "STAGES");
+        Ok(self.handle_command(&cmd, None)?)
     }
 }
 

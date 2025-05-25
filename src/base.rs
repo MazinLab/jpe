@@ -165,6 +165,31 @@ impl BaseController {
     fn get_modules(&mut self) -> BaseResult<()> {
         todo!()
     }
+    /// Checks whether a command is valid given the current state of the hardware
+    fn check_command(&self, cmd: &Command, slot: Slot) -> bool {
+        let opmode_check = match &cmd.allowed_mode {
+            ModeScope::Any => true,
+            ModeScope::Only(modes) => modes.contains(&self.op_mode),
+        };
+        let mod_check = match &cmd.allowed_module {
+            ModuleScope::Any => true,
+            ModuleScope::Only(mods) => {
+                // Check which module is in the given slot and check if it's in the list of
+                // supported modules for this command.
+                // This is a bit ugly, may need to refactor for readability.
+                match slot {
+                    Slot::One if matches!(self.modules[0], Some(m) if mods.contains(&m)) => true,
+                    Slot::Two if matches!(self.modules[1], Some(m) if mods.contains(&m)) => true,
+                    Slot::Three if matches!(self.modules[2], Some(m) if mods.contains(&m)) => true,
+                    Slot::Four if matches!(self.modules[3], Some(m) if mods.contains(&m)) => true,
+                    Slot::Five if matches!(self.modules[4], Some(m) if mods.contains(&m)) => true,
+                    Slot::Six if matches!(self.modules[5], Some(m) if mods.contains(&m)) => true,
+                    _ => false,
+                }
+            }
+        };
+        mod_check && opmode_check
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

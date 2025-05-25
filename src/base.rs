@@ -4,6 +4,7 @@ use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
     net::Ipv4Addr,
+    str::{FromStr, Utf8Error},
     time::{Duration, Instant},
 };
 use thiserror::Error;
@@ -34,6 +35,10 @@ pub enum Error {
     WrongConnMode { expected: ConnMode, found: ConnMode },
     #[error("{0}")]
     General(String),
+    #[error("")]
+    BufOverflow { max_len: usize, idx: usize },
+    #[error("")]
+    Utf8(#[from] Utf8Error),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -103,7 +108,11 @@ pub enum Slot {
 /// The response type expected for a given Command
 #[derive(Debug, Clone, PartialEq)]
 pub enum Response {
+    /// Error responses, begins with "Error"
     Error(String),
+    /// Carriage return delimited responses (currently a bug)
+    CrDelimited(Vec<String>),
+    /// Normal, non-Error responses delimited by commas
     CommaDelimited(Vec<String>),
 }
 
@@ -205,9 +214,54 @@ impl BaseController {
         };
         mod_check && opmode_check
     }
-    /// Parses a response and returns the reesult
-    fn parse_response(&self, cmd: &Command) -> BaseResult<Response> {
-        todo!()
+    /// Parses a response in read buffer and return the result
+    fn parse_response(&self, cmd: &Command, bytes_read: usize) -> BaseResult<Response> {
+        // First, make sure index into the buffer is valid, then try to convert
+        // from bytes to &str since all parsing should be ASCII.
+        let msg = std::str::from_utf8(self.read_buffer.get(..bytes_read).ok_or(
+            Error::BufOverflow {
+                max_len: self.read_buffer.len(),
+                idx: bytes_read,
+            },
+        )?)?;
+
+        if msg.starts_with("Error") {
+            return Ok(Response::Error(msg.to_string()));
+        }
+        // Comma-delimited case when there is only one carriage return in the
+        // non Error path. More than one, the CrDelimited (bug) case
+        match msg.chars().filter(|c| *c == '\r').count() {
+            1 => {
+                // Trim the terminator
+                let trimmed = msg.strip_suffix('\r');
+                if let Some(trimmed) = trimmed {
+                    // Split the msg on commas and collect into vec
+                    // of Strings
+                    let ret: Vec<String> = trimmed
+                        .split(|c| c == ',')
+                        .map(|slice| slice.to_string())
+                        .collect();
+                    return Ok(Response::CommaDelimited(ret));
+                } else {
+                    return Err(Error::InvalidResponse("Bad terminator".to_string()));
+                }
+            }
+            _ => {
+                // Trim the terminator
+                let trimmed = msg.strip_suffix('\r');
+                if let Some(trimmed) = trimmed {
+                    // Split the msg on commas and collect into vec
+                    // of Strings
+                    let ret: Vec<String> = trimmed
+                        .split(|c| c == '\r')
+                        .map(|slice| slice.to_string())
+                        .collect();
+                    return Ok(Response::CrDelimited(ret));
+                } else {
+                    return Err(Error::InvalidResponse("Bad terminator".to_string()));
+                }
+            }
+        }
     }
     /// Higher level read function that reads from any given media into the
     /// internal read buffer.
@@ -215,7 +269,7 @@ impl BaseController {
         todo!()
     }
     /// Low-level reader for the USB connection mode
-    fn read_usb(&mut self) -> BaseResult<usize> {
+    fn read_usb_chunks(&mut self) -> BaseResult<usize> {
         // Clear the internal read buffer and create a local chunk buffer.
         self.read_buffer.fill(0);
         let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
@@ -236,11 +290,12 @@ impl BaseController {
                         .read_buffer
                         .get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
                     {
+                        // Happy path, haven't exceeded read buffer capacity
                         buf_slice.copy_from_slice(&chunk_buf[..chunk_bytes_read]);
                         total_bytes_read += chunk_bytes_read;
                     } else {
                         // Read buffer overrun case, read from chunk buf until
-                        // input buf is full
+                        // input buf is full and break early.
                         if let Some(bytes_left) = (total_bytes_read + chunk_bytes_read)
                             .checked_sub(self.read_buffer.len())
                         {
@@ -264,7 +319,7 @@ impl BaseController {
                 break;
             }
         }
-        // Clear the input buffer of any residual junk and return buf
+        // Clear the input buffer of any residual junk and return bytes read
         reader.clear(serialport::ClearBuffer::Input)?;
         Ok(total_bytes_read)
     }

@@ -55,7 +55,6 @@ pub type BaseResult<T> = std::result::Result<T, Error>;
 #[derive(Debug, Clone, Copy, PartialEq)]
 /// Reperesents the different types of Module supported by the controller
 pub(crate) enum Module {
-    All,
     Cadm,
     Rsm,
     Oem,
@@ -74,7 +73,7 @@ impl TryFrom<String> for Module {
             _ if s.starts_with("oem") => Ok(Self::Oem),
             _ if s.starts_with("psm") => Ok(Self::Psm),
             _ if s.starts_with("edm") => Ok(Self::Edm),
-            _ => Err(Error::InvalidParams(format!("Unknown module: {}", s))),
+            _ => Err(Error::InvalidResponse(format!("Unknown module: {}", s))),
         }
     }
 }
@@ -330,10 +329,6 @@ impl BaseController {
         let bytes_read = self.read_into_buffer()?;
         self.parse_response(bytes_read)
     }
-    /// Polls the device to get the installed modules
-    fn get_modules(&mut self) -> BaseResult<()> {
-        todo!()
-    }
 }
 
 // ======= External API =======
@@ -387,11 +382,28 @@ impl BaseController {
         } else {
             // Build Command and send to controller
             let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "VER");
-            // Extract, set, and return value.
+            // Extract, set, and return value. Direct indexing safe due to bounds check by the handle command
+            // method.
             let mut v = self.handle_command(&cmd, 1)?;
             self.fw_vers = v[0].clone();
             Ok(v.remove(0))
         }
+    }
+    /// Returns the modules installed in the system.
+    pub fn get_module_list(&mut self) -> BaseResult<Vec<String>> {
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "MODLIST");
+        let v = self.handle_command(&cmd, 6)?;
+
+        // Iterate over the internal module collection and update with new values
+        // from the controller. The modules in the interim vector above are guaranteed to be valid modules due to early return.
+        // Length is also guaranteed to be correct due to command handler method.
+        v.iter()
+            .map(|mod_str| Module::try_from(mod_str.clone()))
+            .collect::<BaseResult<Vec<Module>>>()?
+            .iter()
+            .enumerate()
+            .for_each(|(idx, new_mod)| self.modules[idx] = Some(new_mod.clone()));
+        Ok(v)
     }
 }
 

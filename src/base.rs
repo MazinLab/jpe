@@ -1,5 +1,7 @@
 // Defines types and functionality related to the base controller
-use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
+use serialport::{
+    DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
+};
 use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
@@ -17,6 +19,7 @@ const READ_BUF_SIZE: usize = 4096;
 // Used with serial readers to set the chunk size for reading from the serial buffer
 const READ_CHUNK_SIZE: usize = 64;
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
+const DEVICE_PID: u16 = 0000;
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -343,7 +346,7 @@ impl BaseControllerBuilder<Serial> {
         // Try and find the serial port that the device is connected
         let port = match (self.com_port.as_ref(), self.serial_num.as_ref()) {
             (Some(c), _) => c.clone(),
-            (None, Some(s)) => Self::walk_com_ports(s).ok_or(Error::DeviceNotFound)?,
+            (None, Some(s)) => Self::walk_com_ports(Some(s)).ok_or(Error::DeviceNotFound)?,
             _ => {
                 return Err(Error::InvalidParams(
                     "Need serial port or serial number to connect to device".to_string(),
@@ -375,8 +378,34 @@ impl BaseControllerBuilder<Serial> {
     }
     /// Walks available serial ports and tries to find the device based on the
     /// given serial number.
-    fn walk_com_ports(serial_num: &str) -> Option<String> {
-        todo!()
+    fn walk_com_ports(serial_num: Option<&str>) -> Option<String> {
+        let ports = available_ports().ok()?;
+        let ports_with_pid: Vec<&str> = ports
+            .iter()
+            .filter_map(|port| {
+                match &port.port_type {
+                    // Check that a device exists on a USB port with the well-known PID
+                    SerialPortType::UsbPort(info) if info.pid == DEVICE_PID => {
+                        Some((port.port_name.as_str(), info.serial_number.as_ref()))
+                    }
+                    _ => None,
+                }
+            })
+            .filter_map(|(name, found_sn)| {
+                // Check if a passed serial number matches that of any remaining elements
+                // If caller does not pass a serial number, perform no filtering.
+                match (serial_num, found_sn) {
+                    (Some(passed_sn), Some(found_sn)) if passed_sn == found_sn => Some(name),
+                    (None, _) => Some(name),
+                    _ => None,
+                }
+            })
+            .collect();
+
+        // Pull out the path of the first COM port if it exists.
+        ports_with_pid
+            .get(0)
+            .and_then(|port| Some(port.to_string()))
     }
 }
 impl BaseControllerBuilder<Network> {

@@ -352,6 +352,24 @@ impl BaseController {
             modules: [None; 6],
         }
     }
+    /// Handler to abstract the boilerplate used in most command methods.
+    fn handle_command(&mut self, cmd: &Command, n_resp_vals: usize) -> BaseResult<Vec<String>> {
+        let resp = self.comm_handler(&cmd)?;
+        match resp {
+            Response::Error(s) => Err(Error::DeviceError(s)),
+            Response::CrDelimited(v) | Response::CommaDelimited(v) => {
+                if v.len() != n_resp_vals {
+                    return Err(Error::InvalidResponse(format!(
+                        "Expected {} values, got {}",
+                        n_resp_vals,
+                        v.len()
+                    )));
+                } else {
+                    return Ok(v);
+                }
+            }
+        }
+    }
     /// Returns the firmware version of the controller
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {
@@ -363,21 +381,8 @@ impl BaseController {
                 allowed_mode: ModeScope::Any,
                 payload: format!("{}VER{}", MARKER, TERMINATOR),
             };
-            let resp = self.comm_handler(&cmd)?;
-            match resp {
-                Response::Error(s) => Err(Error::DeviceError(s)),
-                Response::CrDelimited(mut v) | Response::CommaDelimited(mut v) => {
-                    if v.len() != 1 {
-                        return Err(Error::InvalidResponse(format!(
-                            "Expected {} values, got {}",
-                            1,
-                            v.len()
-                        )));
-                    } else {
-                        return Ok(v.pop().expect("Existence check performed earlier."));
-                    }
-                }
-            }
+            let mut v = self.handle_command(&cmd, 1)?;
+            Ok(v.pop().expect("Existence check performed earlier"))
         }
     }
 }

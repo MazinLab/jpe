@@ -188,6 +188,18 @@ impl Display for Slot {
         write!(f, "{}", s)
     }
 }
+impl From<Slot> for u8 {
+    fn from(slot: Slot) -> Self {
+        match slot {
+            Slot::One => 1,
+            Slot::Two => 2,
+            Slot::Three => 3,
+            Slot::Four => 4,
+            Slot::Five => 5,
+            Slot::Six => 6,
+        }
+    }
+}
 
 /// The response type expected for a given Command
 #[derive(Debug, Clone, PartialEq)]
@@ -472,6 +484,21 @@ impl BaseController {
             let mut v = self.handle_command(&cmd, Some(1))?;
             self.fw_vers = v[0].clone();
             Ok(v.remove(0))
+        }
+    }
+    /// Returns firmware version information of module in given slot. Returns None if slot is empty.
+    pub fn get_mod_fw_version(&mut self, slot: Slot) -> BaseResult<Option<String>> {
+        let idx = u8::from(slot) as usize;
+        if self.modules[idx].is_some() {
+            let cmd = Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                format!("FIV {}", idx).as_str(),
+            );
+            let mut v = self.handle_command(&cmd, Some(1))?;
+            Ok(Some(v.remove(0)))
+        } else {
+            Ok(None)
         }
     }
     /// Returns a list of all installed modules and updates internal module container

@@ -18,9 +18,12 @@ const STOPBITS: StopBits = StopBits::One;
 const READ_BUF_SIZE: usize = 4096;
 // Used with serial readers to set the chunk size for reading from the serial buffer
 const READ_CHUNK_SIZE: usize = 64;
+// Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
 const TERMINATOR: char = '\r';
+// Used at the start of every Command
+const MARKER: char = '/';
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -293,6 +296,30 @@ impl BaseController {
         Ok(total_bytes_read)
     }
 
+    // Handles the interplay between polling the device and capturing the
+    // acknowledgment that most API functions will use.
+    fn comm_handler(&mut self, cmd: &Command) -> BaseResult<Response> {
+        // encode and send data on wire
+        match self.conn_mode {
+            ConnMode::Serial => {
+                if let Some(ref mut handle) = self.serial_conn {
+                    handle.clear(serialport::ClearBuffer::Output)?;
+                    handle.write_all(cmd.payload.as_bytes())?;
+                } else {
+                    return Err(Error::WrongConnMode {
+                        expected: ConnMode::Serial,
+                        found: ConnMode::Network,
+                    });
+                }
+            }
+            ConnMode::Network => {
+                todo!()
+            }
+        }
+        // Read raw data and try dispatching for local parsing
+        let bytes_read = self.read_into_buffer()?;
+        self.parse_response(bytes_read)
+    }
     /// Polls the device to get the installed modules
     fn get_modules(&mut self) -> BaseResult<()> {
         todo!()
@@ -322,6 +349,15 @@ impl BaseController {
             baud_rate,
             read_buffer: vec![0; READ_BUF_SIZE],
             modules: [None; 6],
+        }
+    }
+    /// Returns the firmware version of the controller
+    pub fn get_fw_version(&self) -> BaseResult<String> {
+        if !self.fw_vers.is_empty() {
+            Ok(self.fw_vers.clone())
+        } else {
+            // Build Command
+            todo!()
         }
     }
 }

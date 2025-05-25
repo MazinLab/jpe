@@ -1,6 +1,11 @@
 // Defines types and functionality related to the base controller
 use serialport::{DataBits, FlowControl, Parity, SerialPort, StopBits};
-use std::{marker::PhantomData, net::Ipv4Addr};
+use std::{
+    io::{self, ErrorKind},
+    marker::PhantomData,
+    net::Ipv4Addr,
+    time::{Duration, Instant},
+};
 use thiserror::Error;
 
 const PARITY: Parity = Parity::None;
@@ -8,6 +13,9 @@ const DATABITS: DataBits = DataBits::Eight;
 const FLOWCONTROL: FlowControl = FlowControl::None;
 const STOPBITS: StopBits = StopBits::One;
 const READ_BUF_SIZE: usize = 4096;
+// Used with serial readers to set the chunk size for reading from the serial buffer
+const READ_CHUNK_SIZE: usize = 64;
+const READ_TIMEOUT: Duration = Duration::from_millis(200);
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -15,11 +23,17 @@ pub enum Error {
     #[error("{0}")]
     Serial(#[from] serialport::Error),
     #[error("")]
+    Io(#[from] io::Error),
+    #[error("")]
     DeviceNotFound,
     #[error("{0}")]
     InvalidParams(String),
     #[error("{0}")]
     InvalidResponse(String),
+    #[error("")]
+    WrongConnMode { expected: ConnMode, found: ConnMode },
+    #[error("{0}")]
+    General(String),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -194,6 +208,65 @@ impl BaseController {
     /// Parses a response and returns the reesult
     fn parse_response(&self, cmd: &Command) -> BaseResult<Response> {
         todo!()
+    }
+    /// Higher level read function that reads from any given media into the
+    /// internal read buffer.
+    fn read_into_buffer(&mut self) -> BaseResult<usize> {
+        todo!()
+    }
+    /// Low-level reader for the USB connection mode
+    fn read_usb(&mut self) -> BaseResult<usize> {
+        // Clear the internal read buffer and create a local chunk buffer.
+        self.read_buffer.fill(0);
+        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
+
+        // Loop to read in chunks and iteratively add to internal read buffer
+        // until total timeout is reached.
+        let read_timer_start = Instant::now();
+        let mut total_bytes_read = 0usize;
+        let reader = self.serial_conn.as_mut().ok_or(Error::WrongConnMode {
+            expected: ConnMode::Serial,
+            found: ConnMode::Network,
+        })?;
+
+        loop {
+            match reader.read(&mut chunk_buf) {
+                Ok(chunk_bytes_read) => {
+                    if let Some(buf_slice) = self
+                        .read_buffer
+                        .get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
+                    {
+                        buf_slice.copy_from_slice(&chunk_buf[..chunk_bytes_read]);
+                        total_bytes_read += chunk_bytes_read;
+                    } else {
+                        // Read buffer overrun case, read from chunk buf until
+                        // input buf is full
+                        if let Some(bytes_left) = (total_bytes_read + chunk_bytes_read)
+                            .checked_sub(self.read_buffer.len())
+                        {
+                            // Know the exact number of bytes to read, can use unsafe accesses
+                            self.read_buffer[total_bytes_read..total_bytes_read + bytes_left]
+                                .copy_from_slice(&chunk_buf[..bytes_left]);
+                            total_bytes_read += bytes_left
+                        } else {
+                            return Err(Error::General(
+                                "Logic error in read buf overrun case, got negative difference between buf len and total bytes read.".to_string(),
+                            ));
+                        }
+                        break;
+                    }
+                }
+                // If chunk times out, just keep iterating until total timeout
+                Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
+                Err(e) => return Err(Error::Io(e)),
+            }
+            if read_timer_start.elapsed() > READ_TIMEOUT {
+                break;
+            }
+        }
+        // Clear the input buffer of any residual junk and return buf
+        reader.clear(serialport::ClearBuffer::Input)?;
+        Ok(total_bytes_read)
     }
 }
 

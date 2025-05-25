@@ -214,7 +214,7 @@ impl BaseController {
         };
         mod_check && opmode_check
     }
-    /// Parses a response in read buffer and return the result
+    /// Parses a response in read buffer and returns the result
     fn parse_response(&self, cmd: &Command, bytes_read: usize) -> BaseResult<Response> {
         // First, make sure index into the buffer is valid, then try to convert
         // from bytes to &str since all bytes should be ASCII.
@@ -227,7 +227,11 @@ impl BaseController {
 
         // Error case returns early
         if msg.starts_with("Error") {
-            return Ok(Response::Error(msg.to_string()));
+            return Ok(Response::Error(
+                msg.strip_suffix('\r')
+                    .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
+                    .to_string(),
+            ));
         }
 
         // Comma-delimited case when there is only one carriage return in the

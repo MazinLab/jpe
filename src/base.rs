@@ -6,6 +6,7 @@ use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
     net::Ipv4Addr,
+    num::ParseIntError,
     str::Utf8Error,
     time::{Duration, Instant},
 };
@@ -48,11 +49,32 @@ pub enum Error {
     Utf8(#[from] Utf8Error),
     #[error("{0}")]
     DeviceError(String),
+    #[error("{0}")]
+    ParseIntError(#[from] ParseIntError),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Supported serial modes for the controller
+pub enum SerialInterface {
+    Rs422,
+    Usb,
+}
+impl TryFrom<&str> for SerialInterface {
+    type Error = Error;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        match s.to_ascii_lowercase() {
+            _ if s == "rs422" => Ok(Self::Rs422),
+            _ if s == "usb" => Ok(Self::Usb),
+            _ => Err(Error::InvalidParams(
+                "Invalid serial mode, only RS422 or USB supported".to_string(),
+            )),
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
 /// Supported address assignment mode for the controller.
 pub enum IpAddrMode {
     Dhcp,
@@ -478,6 +500,15 @@ impl BaseController {
         };
         let mut v = self.handle_command(&cmd, Some(1))?;
         Ok(v.remove(0))
+    }
+    /// Get baudrate setting for the USB or RS-422 interface
+    pub fn get_baud_rate(&mut self, ifc: SerialInterface) -> BaseResult<u32> {
+        let cmd = match ifc {
+            SerialInterface::Rs422 => Command::new(ModuleScope::Any, ModeScope::Any, "GBR RS422"),
+            SerialInterface::Usb => Command::new(ModuleScope::Any, ModeScope::Any, "GBR USB"),
+        };
+        let mut v = self.handle_command(&cmd, Some(1))?;
+        Ok(v.remove(0).parse()?)
     }
 }
 

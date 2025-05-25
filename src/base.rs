@@ -26,9 +26,9 @@ const DEVICE_PID: u16 = 0000;
 pub enum Error {
     #[error("{0}")]
     Serial(#[from] serialport::Error),
-    #[error("")]
+    #[error("{0}")]
     Io(#[from] io::Error),
-    #[error("")]
+    #[error("Device not found.")]
     DeviceNotFound,
     #[error("{0}")]
     InvalidParams(String),
@@ -38,9 +38,9 @@ pub enum Error {
     WrongConnMode { expected: ConnMode, found: ConnMode },
     #[error("{0}")]
     General(String),
-    #[error("")]
+    #[error("max_len: {}, idx: {}", max_len, idx)]
     BufOverflow { max_len: usize, idx: usize },
-    #[error("")]
+    #[error("{0}")]
     Utf8(#[from] Utf8Error),
 }
 
@@ -146,6 +146,7 @@ pub(crate) struct Command {
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
 pub struct BaseController {
+    /// Mode used to connect to the controller
     conn_mode: ConnMode,
     op_mode: ControllerOpMode,
     /// Firmware version of all modules
@@ -326,7 +327,7 @@ pub struct BaseControllerBuilder<T> {
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
-    /// Used since we don't care about using T in the type
+    /// Used since we don't care about using T in data members
     _marker: PhantomData<T>,
 }
 impl BaseControllerBuilder<Serial> {

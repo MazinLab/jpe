@@ -377,19 +377,10 @@ impl BaseController {
         }
     }
     /// Returns firmware version information of module in given slot. Returns None if slot is empty.
-    pub fn get_mod_fw_version(&mut self, slot: Slot) -> BaseResult<Option<String>> {
-        let idx = u8::from(slot.clone()) as usize;
-        if self.modules[idx - 1].is_some() {
-            let cmd = Command::new(
-                ModuleScope::Any,
-                ModeScope::Any,
-                format!("FIV {}", idx).as_str(),
-            );
-            let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
-            Ok(Some(v.remove(0)))
-        } else {
-            Ok(None)
-        }
+    pub fn get_mod_fw_version(&mut self, slot: Slot) -> BaseResult<String> {
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, &format!("FIV {}", slot));
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
     }
     /// Returns a list of all installed modules and updates internal module container
     pub fn get_module_list(&mut self) -> BaseResult<Vec<String>> {
@@ -430,24 +421,22 @@ impl BaseController {
             IpAddrMode::Dhcp => Command::new(
                 ModuleScope::Any,
                 ModeScope::Any,
-                format!(
+                &format!(
                     "{} {} {} {} {}",
                     "IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
-                )
-                .as_str(),
+                ),
             ),
             IpAddrMode::Static => Command::new(
                 ModuleScope::Any,
                 ModeScope::Any,
-                format!(
+                &format!(
                     "{} {} {} {} {}",
                     "IPS",
                     "STATIC",
                     ip_addr.to_string(),
                     mask.to_string(),
                     gateway.to_string()
-                )
-                .as_str(),
+                ),
             ),
         };
         let mut v = self.handle_command(&cmd, Some(1), None)?;
@@ -469,12 +458,12 @@ impl BaseController {
                 SerialInterface::Rs422 => Command::new(
                     ModuleScope::Any,
                     ModeScope::Any,
-                    format!("SBR RS422 {}", baud).as_str(),
+                    &format!("SBR RS422 {}", baud),
                 ),
                 SerialInterface::Usb => Command::new(
                     ModuleScope::Any,
                     ModeScope::Any,
-                    format!("SBR USB {}", baud).as_str(),
+                    &format!("SBR USB {}", baud),
                 ),
             };
             let mut v = self.handle_command(&cmd, Some(1), None)?;
@@ -493,33 +482,23 @@ impl BaseController {
     /// TODO: Figure out how handle the response; the controller will respond only
     /// once the firmware is fully updated (long time.)
     pub fn start_mod_fw_update(&mut self, fname: &str, slot: Slot) -> BaseResult<()> {
-        let idx = u8::from(slot.clone()) as usize;
-        if self.modules[idx - 1].is_some() {
-            let cmd = Command::new(
-                ModuleScope::Any,
-                ModeScope::Any,
-                format!("FU {} {}", slot, fname).as_str(),
-            );
-            let _ = self.handle_command(&cmd, None, Some(slot))?;
-            Ok(())
-        } else {
-            Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
-        }
+        let cmd = Command::new(
+            ModuleScope::Any,
+            ModeScope::Any,
+            &format!("FU {} {}", slot, fname),
+        );
+        let _ = self.handle_command(&cmd, None, Some(slot))?;
+        Ok(())
     }
     /// Get the fail-safe state of the CADM2 module.
     pub fn get_fail_safe_state(&mut self, slot: Slot) -> BaseResult<String> {
-        let idx = u8::from(slot.clone()) as usize;
-        if self.modules[idx - 1].is_some() {
-            let cmd = Command::new(
-                ModuleScope::Only(vec![Module::Cadm]),
-                ModeScope::Any,
-                format!("GFS {}", slot).as_str(),
-            );
-            let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
-            Ok(v.remove(0))
-        } else {
-            Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
-        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Cadm]),
+            ModeScope::Any,
+            &format!("GFS {}", slot),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
     }
     /// Starts moving an actuator or positioner with specified parameters in open loop mode. Supported on
     /// CADM2 modules.
@@ -548,10 +527,6 @@ impl BaseController {
             return Err(Error::Bound("Input parameter out of bounds.".to_string()));
         }
 
-        // Check to see if the slot is populated
-        if !self.modules[u8::from(slot.clone()) as usize - 1].is_some() {
-            return Err(Error::DeviceError(format!("Slot {} is empty", slot)));
-        }
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage)? {
             return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));

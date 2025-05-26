@@ -168,6 +168,13 @@ impl BaseController {
         };
         mod_check && opmode_check
     }
+    /// Checks whether a given stage value is supported by the controller
+    fn check_stage(&mut self, stage: &str) -> BaseResult<bool> {
+        if !self.supported_stages.is_empty() {
+            self.supported_stages = self.get_supported_stages()?;
+        }
+        Ok(self.supported_stages.iter().any(|s| s == stage))
+    }
     /// Parses a response in read buffer and returns the result
     fn parse_response(&self, bytes_read: usize) -> BaseResult<Response> {
         // First, make sure index into the buffer is valid, then try to convert
@@ -546,10 +553,7 @@ impl BaseController {
             return Err(Error::DeviceError(format!("Slot {} is empty", slot)));
         }
         // Get supported stages and see if passed stage value is supported.
-        if !self.supported_stages.is_empty() {
-            self.supported_stages = self.get_supported_stages()?;
-        }
-        if !self.supported_stages.iter().any(|s| s == stage) {
+        if !self.check_stage(stage)? {
             return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
         }
 
@@ -630,10 +634,7 @@ impl BaseController {
         }
 
         // Get supported stages and see if passed stage value is supported.
-        if !self.supported_stages.is_empty() {
-            self.supported_stages = self.get_supported_stages()?;
-        }
-        if !self.supported_stages.iter().any(|s| s == stage) {
+        if !self.check_stage(stage)? {
             return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
         }
 
@@ -659,10 +660,7 @@ impl BaseController {
         stage: &str,
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
-        if !self.supported_stages.is_empty() {
-            self.supported_stages = self.get_supported_stages()?;
-        }
-        if !self.supported_stages.iter().any(|s| s == stage) {
+        if !self.check_stage(stage)? {
             return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
         }
         let cmd = Command::new(

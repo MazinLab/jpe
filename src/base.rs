@@ -996,7 +996,7 @@ impl BaseControllerBuilder<Init> {
         }
     }
     /// Continies in the path to build the controller using IP.
-    pub fn with_network(self, ip_addr: Ipv4Addr) -> BaseControllerBuilder<Network> {
+    pub fn with_network(self, ip_addr: &str) -> BaseControllerBuilder<Network> {
         todo!()
     }
 }
@@ -1072,4 +1072,9 @@ impl BaseControllerBuilder<Network> {
     fn build() -> BaseController {
         todo!("Need to determine whether the controller supports TCP or UDP...")
     }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
 }

@@ -733,6 +733,46 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
+    /// Read the current value of the negative end-stop parameter set for a channel `ch` of an RSM.
+    /// Response value in in meters.
+    pub fn read_neg_end_stop(
+        &mut self,
+        slot: Slot,
+        ch: ModuleChannel,
+        stage: &str,
+    ) -> BaseResult<f32> {
+        // Get supported stages and see if passed stage value is supported.
+        if !self.check_stage(stage)? {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("MIR {} {} {}", slot, ch, stage),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0).parse()?)
+    }
+    /// Read the current value of the positive end-stop parameter set for a channel `ch` of an RSM.
+    /// Response value in in meters.
+    pub fn read_pos_end_stop(
+        &mut self,
+        slot: Slot,
+        ch: ModuleChannel,
+        stage: &str,
+    ) -> BaseResult<f32> {
+        // Get supported stages and see if passed stage value is supported.
+        if !self.check_stage(stage)? {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("MAR {} {} {}", slot, ch, stage),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0).parse()?)
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

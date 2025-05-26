@@ -239,3 +239,21 @@ impl Display for Direction {
         write!(f, "{}", s)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+/// Represents the stage positioning modes available when using servodrive
+/// when setting a setpoint.
+pub enum SetpointPosMode {
+    Absolute,
+    Relative,
+}
+
+impl Display for SetpointPosMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            SetpointPosMode::Absolute => "1",
+            SetpointPosMode::Relative => "0",
+        };
+        write!(f, "{}", s)
+    }
+}

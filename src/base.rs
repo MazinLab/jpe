@@ -61,7 +61,7 @@ pub type BaseResult<T> = std::result::Result<T, Error>;
 
 /// The response type expected for a given Command
 #[derive(Debug, Clone, PartialEq)]
-pub enum Response {
+pub(crate) enum Response {
     /// Error responses, begins with "Error"
     Error(String),
     /// Carriage return delimited responses (currently a bug)

@@ -711,6 +711,17 @@ impl BaseController {
 
         Ok((v[0], v[1], v[2]))
     }
+    /// Set the current position of a Resistive Linear Sensor (RLS) connected to channel `ch` of the RSM to be
+    /// the negative end-stop. To be used as part of the RLS Calibration process.
+    pub fn set_negative_end_stop(&mut self, slot: Slot, ch: ModuleChannel) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("MIS {} {}", slot, ch),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

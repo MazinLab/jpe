@@ -54,6 +54,36 @@ impl Slot {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
+    /// Returns instance (variant) One
+    #[classmethod]
+    fn one(_cls: &Bound<'_, PyType>) -> Self {
+        Self::One
+    }
+    /// Returns instance (variant) Two
+    #[classmethod]
+    fn two(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Two
+    }
+    /// Returns instance (variant) Three
+    #[classmethod]
+    fn three(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Three
+    }
+    /// Returns instance (variant) Four
+    #[classmethod]
+    fn four(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Four
+    }
+    /// Returns instance (variant) Five
+    #[classmethod]
+    fn five(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Five
+    }
+    /// Returns instance (variant) Six
+    #[classmethod]
+    fn six(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Six
+    }
     /// Maps a Slot object to it's
     fn to_int(&self) -> PyResult<u8> {
         Ok(u8::from(self.clone()))

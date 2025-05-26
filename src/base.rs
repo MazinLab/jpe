@@ -599,6 +599,55 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
+    /// Sets the CADM2 in external control mode (Flexdrive mode). Similar to MOV, but
+    /// `step_freq` now defines the step frequency at maximum (absolute) input signal. By
+    /// default, set this to 600 [Hz]. `direction` now modulates the stage movement direction
+    /// with respect to the polarity of the external input signal (E.g Negative -> positive external signal voltage drives
+    /// the stage in the negative direction)
+    pub fn enable_ext_input_mode(
+        &mut self,
+        slot: Slot,
+        direction: Direction,
+        step_freq: u16,
+        r_step_size: u8,
+        temp: u16,
+        stage: &str,
+        drive_factor: f32,
+    ) -> BaseResult<String> {
+        // Bounds check all the input variables
+        if ![
+            STEP_FREQ_BOUNDS.contains(&step_freq),
+            RELATIVE_ACTUATOR_STEP_SIZE_BOUND.contains(&r_step_size),
+            TEMP_BOUNDS.contains(&temp),
+            DRIVE_FACTOR_BOUNDS.contains(&drive_factor),
+        ]
+        .iter()
+        .all(|cond| *cond)
+        {
+            return Err(Error::Bound("Input parameter out of bounds.".to_string()));
+        }
+
+        // Get supported stages and see if passed stage value is supported.
+        if !self.supported_stages.is_empty() {
+            self.supported_stages = self.get_supported_stages()?;
+        }
+        if !self.supported_stages.iter().any(|s| s == stage) {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+        }
+
+        // Create the command and send to controller
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Cadm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!(
+                "EXT {} {} {} {} {} {} {}",
+                slot, direction, step_freq, r_step_size, temp, stage, drive_factor
+            ),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        self.op_mode = ControllerOpMode::Flexdrive;
+        Ok(v.remove(0))
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

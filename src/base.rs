@@ -130,6 +130,30 @@ pub struct BaseController {
 }
 // ======= Internal API =======
 impl BaseController {
+    fn new(
+        conn_mode: ConnMode,
+        ip_addr: Option<Ipv4Addr>,
+        com_port: Option<String>,
+        serial_conn: Option<Box<dyn SerialPort>>,
+        net_conn: Option<()>,
+        serial_num: Option<String>,
+        baud_rate: Option<u32>,
+    ) -> Self {
+        Self {
+            conn_mode,
+            op_mode: ControllerOpMode::Basedrive,
+            fw_vers: "".to_string(),
+            ip_addr,
+            com_port,
+            serial_conn,
+            net_conn,
+            serial_num,
+            baud_rate,
+            read_buffer: vec![0; READ_BUF_SIZE],
+            modules: [None; 6],
+            supported_stages: Vec::new(),
+        }
+    }
     /// Checks whether a command is valid given the current state of the hardware
     fn check_command(&self, cmd: &Command, slot: Option<Slot>) -> bool {
         let opmode_check = match &cmd.allowed_mode {
@@ -341,31 +365,6 @@ impl BaseController {
 // ======= External API =======
 #[pymethods]
 impl BaseController {
-    #[new]
-    fn new(
-        conn_mode: ConnMode,
-        ip_addr: Option<Ipv4Addr>,
-        com_port: Option<String>,
-        serial_conn: Option<Box<dyn SerialPort>>,
-        net_conn: Option<()>,
-        serial_num: Option<String>,
-        baud_rate: Option<u32>,
-    ) -> Self {
-        Self {
-            conn_mode,
-            op_mode: ControllerOpMode::Basedrive,
-            fw_vers: "".to_string(),
-            ip_addr,
-            com_port,
-            serial_conn,
-            net_conn,
-            serial_num,
-            baud_rate,
-            read_buffer: vec![0; READ_BUF_SIZE],
-            modules: [None; 6],
-            supported_stages: Vec::new(),
-        }
-    }
     /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {

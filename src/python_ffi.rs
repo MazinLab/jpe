@@ -4,7 +4,7 @@ use std::str::FromStr;
 
 use crate::{
     base::Error,
-    config::{IpAddrMode, SerialInterface, Slot},
+    config::{IpAddrMode, Module, SerialInterface, Slot},
 };
 use pyo3::exceptions::{
     PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyUnicodeError,
@@ -71,6 +71,14 @@ impl SerialInterface {
 
 #[pymethods]
 impl IpAddrMode {
+    #[classmethod]
+    /// Fallibly constructs class from a string.
+    fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        Self::from_str(s).map_err(PyErr::from)
+    }
+}
+#[pymethods]
+impl Module {
     #[classmethod]
     /// Fallibly constructs class from a string.
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {

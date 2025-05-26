@@ -109,6 +109,7 @@ impl FromStr for IpAddrMode {
 }
 
 /// Reperesents the different types of Module supported by the controller
+#[pyclass]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Module {
     Cadm,
@@ -121,16 +122,7 @@ impl TryFrom<String> for Module {
     type Error = Error;
 
     fn try_from(s: String) -> Result<Self, Self::Error> {
-        // The device spec uses ASCII
-        let s = s.to_ascii_lowercase();
-        match s {
-            _ if s.starts_with("cadm") => Ok(Self::Cadm),
-            _ if s.starts_with("rsm") => Ok(Self::Rsm),
-            _ if s.starts_with("oem") => Ok(Self::Oem),
-            _ if s.starts_with("psm") => Ok(Self::Psm),
-            _ if s.starts_with("edm") => Ok(Self::Edm),
-            _ => Err(Error::InvalidResponse(format!("Unknown module: {}", s))),
-        }
+        Self::from_str(&s)
     }
 }
 impl FromStr for Module {

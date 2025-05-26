@@ -1,5 +1,6 @@
 // Contains types restricting values related to the controller API spec
 use crate::base::Error;
+use derive_more;
 use pyo3::prelude::*;
 use std::{fmt::Display, ops::RangeInclusive, str::FromStr};
 
@@ -12,8 +13,8 @@ pub(crate) const TEMP_BOUNDS: RangeInclusive<u16> = 0..=300;
 pub(crate) const SCANNER_LEVEL_BOUNDS: RangeInclusive<u16> = 0..=1023;
 
 /// The module slot within the controller
-#[pyclass]
 #[derive(Debug, Clone, PartialEq)]
+#[pyclass]
 pub enum Slot {
     One,
     Two,
@@ -67,9 +68,8 @@ impl From<Slot> for u8 {
 }
 
 /// Supported serial modes for the controller
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 #[pyclass]
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[derive_more(Display)]
 pub enum SerialInterface {
     Rs422,
     Usb,
@@ -89,8 +89,8 @@ impl FromStr for SerialInterface {
 }
 
 /// Supported address assignment mode for the controller.
+#[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
 #[pyclass]
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IpAddrMode {
     Dhcp,
     Static,
@@ -110,8 +110,8 @@ impl FromStr for IpAddrMode {
 }
 
 /// Reperesents the different types of Module supported by the controller
+#[derive(Debug, Clone, Copy, PartialEq, derive_more::Display)]
 #[pyclass]
-#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Module {
     Cadm,
     Rsm,
@@ -144,8 +144,8 @@ impl FromStr for Module {
 }
 
 /// The operation modes supported by the controller
-#[derive(Debug, Clone, PartialEq)]
-#[derive_more(Display)]
+#[derive(Debug, Clone, PartialEq, derive_more::Display)]
+#[pyclass]
 pub enum ControllerOpMode {
     Basedrive,
     Servodrive,
@@ -154,19 +154,20 @@ pub enum ControllerOpMode {
 
 /// Serial connection mode to the controller. Used in type-state-builder
 /// pattern for controller creation
-#[derive(Debug, Clone, PartialEq)]
-#[derive_more(Display)]
+#[derive(Debug, Clone, PartialEq, derive_more::Display)]
+#[pyclass]
 pub struct Serial;
 
 /// Network connection mode to the controller. Used in type-state-builder
 /// pattern for controller creation
-#[derive(Debug, Clone, PartialEq)]
-#[derive_more(Display)]
+#[derive(Debug, Clone, PartialEq, derive_more::Display)]
+#[pyclass]
 pub struct Network;
 
 /// Connection mode to the controller. Used internally by the controller
 /// base API.
 #[derive(Debug, Clone, PartialEq)]
+#[pyclass]
 pub(crate) enum ConnMode {
     Serial,
     Network,
@@ -183,6 +184,7 @@ impl Display for ConnMode {
 
 /// Specific channel of a Module
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[pyclass]
 pub enum ModuleChannel {
     One,
     Two,
@@ -224,6 +226,7 @@ impl From<ModuleChannel> for u8 {
 /// Direction of movement for a given stage. 1 for positive movement and 0 for
 /// negative movement.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[pyclass]
 pub enum Direction {
     Positive,
     Negative,
@@ -250,6 +253,7 @@ impl Display for Direction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[pyclass]
 /// Represents the stage positioning modes available when using servodrive
 /// when setting a setpoint.
 pub enum SetpointPosMode {

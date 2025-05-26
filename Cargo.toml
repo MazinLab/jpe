@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+derive_more = { version = "2.0.1", features = ["display"] }
 pyo3 = { version = "0.25.0", features = ["extension-module"] }
 serialport = "4.7.2"
 thiserror = "2.0.12"

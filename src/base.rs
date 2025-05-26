@@ -784,7 +784,7 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
-    /// Set the duty cycle of the sensor excitation signal of the RSM for all channels. Value is in [%] and can
+    /// Set the duty cycle of the sensor excitation signal of the RSM for all channels. `duty` is a percentage and can
     /// be set to 0 or from 10 to 100
     pub fn set_excitation_ds(&mut self, slot: Slot, duty: u8) -> BaseResult<String> {
         if !(duty == 0 || (10..=100).contains(&duty)) {
@@ -797,6 +797,28 @@ impl BaseController {
             ModuleScope::Only(vec![Module::Rsm]),
             ModeScope::Only(vec![ControllerOpMode::Basedrive]),
             &format!("EXS {} {}", slot, duty),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
+    }
+    /// Read the duty cycle of the sensor excitation signal for all channels of an RSM.
+    /// Response value is a percentage.
+    pub fn read_excitation_ds(&mut self, slot: Slot) -> BaseResult<u8> {
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("EXR {}", slot),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0).parse()?)
+    }
+    /// Store the current values of the following parameters of an RSM to the non-volatile memory of the
+    /// controller: excitation duty cycle (EXS), negative end stop (MIS) and positive end-stop (MAS)
+    pub fn save_rsm_nvram(&mut self, slot: Slot) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("RSS {}", slot),
         );
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))

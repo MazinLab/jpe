@@ -512,9 +512,9 @@ impl BaseController {
             Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
         }
     }
-    /// Starts moving an actuator or positioner with specified parameters. Supported on
+    /// Starts moving an actuator or positioner with specified parameters in open loop mode. Supported on
     /// CADM2 modules.
-    pub fn move_stage(
+    pub fn move_stage_open(
         &mut self,
         slot: Slot,
         direction: Direction,
@@ -562,6 +562,21 @@ impl BaseController {
             .as_str(),
         );
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
+    }
+    /// Stops movement of an actuator (MOV command), disables external input mode (EXT command,
+    /// breaks out of Flexdrive mode) or disables scan mode (SDC command).
+    pub fn stop_stage(&mut self, slot: Slot) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Cadm]),
+            ModeScope::Only(vec![
+                ControllerOpMode::Basedrive,
+                ControllerOpMode::Flexdrive,
+            ]),
+            format!("STP {}", slot).as_str(),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        self.op_mode = ControllerOpMode::Basedrive;
         Ok(v.remove(0))
     }
 }

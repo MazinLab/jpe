@@ -784,6 +784,23 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
+    /// Set the duty cycle of the sensor excitation signal of the RSM for all channels. Value is in [%] and can
+    /// be set to 0 or from 10 to 100
+    pub fn set_excitation_ds(&mut self, slot: Slot, duty: u8) -> BaseResult<String> {
+        if !(duty == 0 || (10..=100).contains(&duty)) {
+            return Err(Error::Bound(format!(
+                "Duty cycle out of range: 0, 10-100. Got {}",
+                duty
+            )));
+        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("EXS {} {}", slot, duty),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

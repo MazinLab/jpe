@@ -6,7 +6,6 @@ use serialport::{
 };
 use std::{
     io::{self, ErrorKind},
-    marker::PhantomData,
     net::{AddrParseError, Ipv4Addr},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
@@ -25,8 +24,6 @@ const READ_CHUNK_SIZE: usize = 64;
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
 const TERMINATOR: char = '\r';
-// Used at the start of every Command
-const MARKER: char = '/';
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -105,6 +102,11 @@ impl Command {
         }
     }
 }
+// Type-state Builder states for the BaseControllerBuilder
+#[derive(Debug, Clone, PartialEq, derive_more::Display)]
+pub struct Init;
+struct Serial;
+struct Network;
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
@@ -961,21 +963,44 @@ pub struct BaseControllerBuilder<T> {
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
-    /// Used since we don't care about using T in data members
-    _marker: PhantomData<T>,
+    _state: T,
 }
-impl BaseControllerBuilder<Serial> {
-    pub fn new(com_port: Option<String>, serial_num: Option<String>, baud_rate: u32) -> Self {
+impl BaseControllerBuilder<Init> {
+    /// Starts the type-state builder pattern
+    pub fn new() -> BaseControllerBuilder<Init> {
         Self {
-            com_port,
+            com_port: None,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
             net_conn: None,
-            serial_num,
-            baud_rate: Some(baud_rate),
-            _marker: PhantomData,
+            serial_num: None,
+            baud_rate: None,
+            _state: Init,
         }
     }
+    /// Continues in the path to build the controller using serial (USB or RS-422).
+    pub fn with_serial(
+        self,
+        com_port: String,
+        serial_num: String,
+        baud_rate: u32,
+    ) -> BaseControllerBuilder<Serial> {
+        BaseControllerBuilder {
+            conn_mode: ConnMode::Serial,
+            ip_addr: None,
+            net_conn: None,
+            com_port: Some(com_port),
+            serial_num: Some(serial_num),
+            baud_rate: Some(baud_rate),
+            _state: Serial,
+        }
+    }
+    /// Continies in the path to build the controller using IP.
+    pub fn with_network(self, ip_addr: Ipv4Addr) -> BaseControllerBuilder<Network> {
+        todo!()
+    }
+}
+impl BaseControllerBuilder<Serial> {
     /// Builds the controller type and tries to connect over serial.
     pub fn build(self) -> BaseResult<BaseController> {
         // Try and find the serial port that the device is connected
@@ -1044,7 +1069,7 @@ impl BaseControllerBuilder<Serial> {
     }
 }
 impl BaseControllerBuilder<Network> {
-    fn new() -> BaseController {
+    fn build() -> BaseController {
         todo!("Need to determine whether the controller supports TCP or UDP...")
     }
 }

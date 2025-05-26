@@ -5,8 +5,8 @@ use std::str::FromStr;
 use crate::{
     base::Error,
     config::{
-        ConnMode, ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, Network, Serial,
-        SerialInterface, SetpointPosMode, Slot,
+        ConnMode, ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
+        SetpointPosMode, Slot,
     },
 };
 use pyo3::exceptions::{
@@ -209,24 +209,6 @@ impl ControllerOpMode {
     }
 }
 #[pymethods]
-impl Serial {
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{self}"))
-    }
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self))
-    }
-}
-#[pymethods]
-impl Network {
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{self}"))
-    }
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self))
-    }
-}
-#[pymethods]
 impl ConnMode {
     /// Returns instance (variant) Serial
     #[classmethod]
@@ -321,7 +303,3 @@ impl SetpointPosMode {
         Ok(format!("{:?}", self))
     }
 }
-
-// ======= Controller Extension Methods =======
-// Used to make methods on the Controller ergonomic
-// for Python users

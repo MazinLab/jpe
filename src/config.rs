@@ -151,19 +151,6 @@ pub enum ControllerOpMode {
     Servodrive,
     Flexdrive,
 }
-
-/// Serial connection mode to the controller. Used in type-state-builder
-/// pattern for controller creation
-#[derive(Debug, Clone, PartialEq, derive_more::Display)]
-#[pyclass]
-pub struct Serial;
-
-/// Network connection mode to the controller. Used in type-state-builder
-/// pattern for controller creation
-#[derive(Debug, Clone, PartialEq, derive_more::Display)]
-#[pyclass]
-pub struct Network;
-
 /// Connection mode to the controller. Used internally by the controller
 /// base API.
 #[derive(Debug, Clone, PartialEq)]

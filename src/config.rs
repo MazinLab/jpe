@@ -67,6 +67,7 @@ impl From<Slot> for u8 {
 }
 
 /// Supported serial modes for the controller
+#[pyclass]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SerialInterface {
     Rs422,

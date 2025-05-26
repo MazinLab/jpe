@@ -1,14 +1,15 @@
 // Python extensions for existing types
 
-use std::fmt::Debug;
 use std::str::FromStr;
 
-use crate::{base::Error, config::Slot};
+use crate::{
+    base::Error,
+    config::{SerialInterface, Slot},
+};
 use pyo3::exceptions::{
     PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyUnicodeError,
     PyValueError,
 };
-use pyo3::ffi::PyType_Slot;
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 
@@ -48,7 +49,7 @@ impl Slot {
     #[classmethod]
     /// Fallibly constructs a Slot object from a string.
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
-        Slot::from_str(s).map_err(PyErr::from)
+        Self::from_str(s).map_err(PyErr::from)
     }
     /// Maps a Slot object to it's
     fn to_int(&self) -> PyResult<u8> {
@@ -56,5 +57,14 @@ impl Slot {
     }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
+    }
+}
+
+#[pymethods]
+impl SerialInterface {
+    #[classmethod]
+    /// Fallibly constructs a Serial Interface object from a string.
+    fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        Self::from_str(s).map_err(PyErr::from)
     }
 }

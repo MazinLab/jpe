@@ -206,3 +206,31 @@ impl From<ModuleChannel> for u8 {
         }
     }
 }
+
+/// Direction of movement for a given stage. 1 for positive movement and 0 for
+/// negative movement.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Direction {
+    Positive,
+    Negative,
+}
+impl FromStr for Direction {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase() {
+            _ if s == "one" || s == "1" => Ok(Self::Positive),
+            _ if s == "zero" || s == "0" => Ok(Self::Negative),
+            _ => Err(Error::InvalidParams(format!("Invalid Direction: {}", s))),
+        }
+    }
+}
+impl Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::Positive => "1",
+            Self::Negative => "0",
+        };
+        write!(f, "{}", s)
+    }
+}

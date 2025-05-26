@@ -40,6 +40,7 @@ impl From<Error> for PyErr {
             Error::DeviceError(s) => PyException::new_err(format!("Device Error: {}", s)),
             Error::ParseIntError(e) => PyValueError::new_err(e),
             Error::ParseFloatError(e) => PyValueError::new_err(e),
+            Error::AddrParseError(e) => PyValueError::new_err(e),
         }
     }
 }

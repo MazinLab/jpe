@@ -7,7 +7,7 @@ use serialport::{
 use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
-    net::Ipv4Addr,
+    net::{AddrParseError, Ipv4Addr},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
     time::{Duration, Instant},
@@ -57,6 +57,8 @@ pub enum Error {
     ParseIntError(#[from] ParseIntError),
     #[error("{0}")]
     ParseFloatError(#[from] ParseFloatError),
+    #[error("{0}")]
+    AddrParseError(#[from] AddrParseError),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -403,7 +405,7 @@ impl BaseController {
 
 // ======= PyO3 Compatible External API =======
 // Contains methods that are externally accessible from Rust and Python (without extension)
-// along with private methods (Rust) that extended externally accessible Rust methods
+// along with PRIVATE methods (Rust) that extended externally accessible Rust methods
 // that are not directly compatible with Python.
 #[pymethods]
 impl BaseController {
@@ -453,6 +455,17 @@ impl BaseController {
     pub fn get_ip_config(&mut self) -> BaseResult<Vec<String>> {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/IPR");
         Ok(self.handle_command(&cmd, Some(5), None)?)
+    }
+    /// Private python extension method for the `set_ip_config`. Sets the IP address
+    /// configuration for the controller.
+    fn set_ip_config_py(
+        &mut self,
+        addr_mode: IpAddrMode,
+        ip_addr: &str,
+        mask: &str,
+        gateway: &str,
+    ) -> BaseResult<String> {
+        self.set_ip_config(addr_mode, ip_addr.parse()?, mask.parse()?, gateway.parse()?)
     }
 
     /// Get baudrate setting for the USB or RS-422 interface

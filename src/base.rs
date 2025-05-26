@@ -98,7 +98,7 @@ impl Command {
         Self {
             allowed_mod,
             allowed_mode,
-            payload: format!("{}{}{}", MARKER, payload, TERMINATOR),
+            payload: format!("{}{}", payload, TERMINATOR),
         }
     }
 }
@@ -368,7 +368,7 @@ impl BaseController {
             Ok(self.fw_vers.clone())
         } else {
             // Build Command and send to controller
-            let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "VER");
+            let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/VER");
             // Extract, set, and return value. Direct indexing safe due to bounds check by the handle command
             // method.
             let mut v = self.handle_command(&cmd, Some(1), None)?;
@@ -384,7 +384,7 @@ impl BaseController {
     }
     /// Returns a list of all installed modules and updates internal module container
     pub fn get_module_list(&mut self) -> BaseResult<Vec<String>> {
-        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "MODLIST");
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/MODLIST");
         let v = self.handle_command(&cmd, Some(6), None)?;
 
         // Iterate over the internal module collection and update with new values
@@ -400,13 +400,13 @@ impl BaseController {
     }
     /// Returns a list of supported actuator and stage types
     pub fn get_supported_stages(&mut self) -> BaseResult<Vec<String>> {
-        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "STAGES");
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/STAGES");
         Ok(self.handle_command(&cmd, None, None)?)
     }
     /// Returns IP configuration for the LAN interface.
     /// Response: [MODE],[IP address],[Subnet Mask],[Gateway],[MAC Address]
     pub fn get_ip_config(&mut self) -> BaseResult<Vec<String>> {
-        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "IPR");
+        let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/IPR");
         Ok(self.handle_command(&cmd, Some(5), None)?)
     }
     /// Sets the IP configuration for the LAN interface
@@ -423,7 +423,7 @@ impl BaseController {
                 ModeScope::Any,
                 &format!(
                     "{} {} {} {} {}",
-                    "IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
+                    "/IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
                 ),
             ),
             IpAddrMode::Static => Command::new(
@@ -431,7 +431,7 @@ impl BaseController {
                 ModeScope::Any,
                 &format!(
                     "{} {} {} {} {}",
-                    "IPS",
+                    "/IPS",
                     "STATIC",
                     ip_addr.to_string(),
                     mask.to_string(),
@@ -445,8 +445,8 @@ impl BaseController {
     /// Get baudrate setting for the USB or RS-422 interface
     pub fn get_baud_rate(&mut self, ifc: SerialInterface) -> BaseResult<u32> {
         let cmd = match ifc {
-            SerialInterface::Rs422 => Command::new(ModuleScope::Any, ModeScope::Any, "GBR RS422"),
-            SerialInterface::Usb => Command::new(ModuleScope::Any, ModeScope::Any, "GBR USB"),
+            SerialInterface::Rs422 => Command::new(ModuleScope::Any, ModeScope::Any, "/GBR RS422"),
+            SerialInterface::Usb => Command::new(ModuleScope::Any, ModeScope::Any, "/GBR USB"),
         };
         let mut v = self.handle_command(&cmd, Some(1), None)?;
         Ok(v.remove(0).parse()?)
@@ -458,12 +458,12 @@ impl BaseController {
                 SerialInterface::Rs422 => Command::new(
                     ModuleScope::Any,
                     ModeScope::Any,
-                    &format!("SBR RS422 {}", baud),
+                    &format!("/SBR RS422 {}", baud),
                 ),
                 SerialInterface::Usb => Command::new(
                     ModuleScope::Any,
                     ModeScope::Any,
-                    &format!("SBR USB {}", baud),
+                    &format!("/SBR USB {}", baud),
                 ),
             };
             let mut v = self.handle_command(&cmd, Some(1), None)?;

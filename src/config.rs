@@ -163,3 +163,43 @@ pub(crate) enum ConnMode {
     Serial,
     Network,
 }
+
+/// Specific channel of a Module
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ModuleChannel {
+    One,
+    Two,
+    Three,
+}
+
+impl FromStr for ModuleChannel {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase() {
+            _ if s == "one" || s == "1" => Ok(Self::One),
+            _ if s == "two" || s == "2" => Ok(Self::Two),
+            _ if s == "three" || s == "3" => Ok(Self::Three),
+            _ => Err(Error::InvalidParams(format!("Invalid channel: {}", s))),
+        }
+    }
+}
+impl Display for ModuleChannel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Self::One => "1",
+            Self::Two => "2",
+            Self::Three => "3",
+        };
+        write!(f, "{}", s)
+    }
+}
+impl From<ModuleChannel> for u8 {
+    fn from(m: ModuleChannel) -> Self {
+        match m {
+            ModuleChannel::One => 1,
+            ModuleChannel::Two => 2,
+            ModuleChannel::Three => 3,
+        }
+    }
+}

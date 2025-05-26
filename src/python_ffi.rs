@@ -46,7 +46,6 @@ impl From<Error> for PyErr {
 
 // ======= Config Type Mappings =======
 // Python extensions for config spec types, mostly for trait methods
-
 #[pymethods]
 impl Slot {
     #[classmethod]
@@ -84,7 +83,7 @@ impl Slot {
     fn six(_cls: &Bound<'_, PyType>) -> Self {
         Self::Six
     }
-    /// Maps a Slot object to it's
+    /// Maps instance to int
     fn to_int(&self) -> PyResult<u8> {
         Ok(u8::from(self.clone()))
     }
@@ -103,6 +102,16 @@ impl SerialInterface {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
+    /// Returns instance (variant) Rs422
+    #[classmethod]
+    fn rs422(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Rs422
+    }
+    /// Returns instance (variant) Usb
+    #[classmethod]
+    fn usb(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Usb
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
@@ -118,6 +127,16 @@ impl IpAddrMode {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
+    /// Returns instance (variant) Dhcp
+    #[classmethod]
+    fn dhcp(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Dhcp
+    }
+    /// Returns instance (variant) Static
+    #[classmethod]
+    fn stat(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Static
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
@@ -132,6 +151,31 @@ impl Module {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
+    /// Returns instance (variant) Cadm
+    #[classmethod]
+    fn cadm(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Cadm
+    }
+    /// Returns instance (variant) Rsm
+    #[classmethod]
+    fn rsm(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Rsm
+    }
+    /// Returns instance (variant) Oem
+    #[classmethod]
+    fn oem(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Oem
+    }
+    /// Returns instance (variant) Psm
+    #[classmethod]
+    fn psm(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Psm
+    }
+    /// Returns instance (variant) Edm
+    #[classmethod]
+    fn edm(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Edm
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
@@ -141,6 +185,21 @@ impl Module {
 }
 #[pymethods]
 impl ControllerOpMode {
+    /// Returns instance (variant) Basedrive
+    #[classmethod]
+    fn base(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Basedrive
+    }
+    /// Returns instance (variant) Servodrive
+    #[classmethod]
+    fn servo(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Servodrive
+    }
+    /// Returns instance (variant) Flexdrive
+    #[classmethod]
+    fn flex(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Flexdrive
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
@@ -168,6 +227,16 @@ impl Network {
 }
 #[pymethods]
 impl ConnMode {
+    /// Returns instance (variant) Serial
+    #[classmethod]
+    fn serial(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Serial
+    }
+    /// Returns instance (variant) Network
+    #[classmethod]
+    fn network(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Network
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
@@ -182,7 +251,22 @@ impl ModuleChannel {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
-    /// Maps a Slot object to it's
+    /// Returns instance (variant) One
+    #[classmethod]
+    fn one(_cls: &Bound<'_, PyType>) -> Self {
+        Self::One
+    }
+    /// Returns instance (variant) Two
+    #[classmethod]
+    fn two(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Two
+    }
+    /// Returns instance (variant) Three
+    #[classmethod]
+    fn three(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Three
+    }
+    /// Maps instance to int
     fn to_int(&self) -> PyResult<u8> {
         Ok(u8::from(self.clone()))
     }
@@ -200,6 +284,16 @@ impl Direction {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
+    /// Returns instance (variant) Positive
+    #[classmethod]
+    fn pos(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Positive
+    }
+    /// Returns instance (variant) Negative
+    #[classmethod]
+    fn neg(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Negative
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
@@ -209,6 +303,16 @@ impl Direction {
 }
 #[pymethods]
 impl SetpointPosMode {
+    /// Returns instance (variant) Absolute
+    #[classmethod]
+    fn abs(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Absolute
+    }
+    /// Returns instance (variant) Relative
+    #[classmethod]
+    fn rel(_cls: &Bound<'_, PyType>) -> Self {
+        Self::Relative
+    }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }

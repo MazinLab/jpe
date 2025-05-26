@@ -1,5 +1,6 @@
 // Contains types restricting values related to the controller API spec
 use crate::base::Error;
+use pyo3::prelude::*;
 use std::{fmt::Display, ops::RangeInclusive, str::FromStr};
 
 pub(crate) const BAUD_BOUNDS: RangeInclusive<u32> = 9600..=1_000_000;
@@ -11,6 +12,7 @@ pub(crate) const TEMP_BOUNDS: RangeInclusive<u16> = 0..=300;
 pub(crate) const SCANNER_LEVEL_BOUNDS: RangeInclusive<u16> = 0..=1023;
 
 /// The module slot within the controller
+#[pyclass]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Slot {
     One,

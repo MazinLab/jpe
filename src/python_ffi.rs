@@ -1,13 +1,19 @@
 // Python extensions for existing types
 
-use crate::base::Error;
+use std::fmt::Debug;
+use std::str::FromStr;
+
+use crate::{base::Error, config::Slot};
 use pyo3::exceptions::{
     PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyUnicodeError,
     PyValueError,
 };
+use pyo3::ffi::PyType_Slot;
 use pyo3::prelude::*;
+use pyo3::types::PyType;
 
-// Define mapping between the crate custom Error variants and Python
+// ======= Error Mapping =======
+// Define mapping between the crate local custom Error variants and Python
 // exceptions
 impl From<Error> for PyErr {
     fn from(e: Error) -> Self {
@@ -31,5 +37,24 @@ impl From<Error> for PyErr {
             Error::ParseIntError(e) => PyValueError::new_err(e),
             Error::ParseFloatError(e) => PyValueError::new_err(e),
         }
+    }
+}
+
+// ======= Config Type Mappings =======
+// Python extensions for config spec types, mostly for trait methods
+
+#[pymethods]
+impl Slot {
+    #[classmethod]
+    /// Fallibly constructs a Slot object from a string.
+    fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        Slot::from_str(s).map_err(PyErr::from)
+    }
+    /// Maps a Slot object to it's
+    fn to_int(&self) -> PyResult<u8> {
+        Ok(u8::from(self.clone()))
+    }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
     }
 }

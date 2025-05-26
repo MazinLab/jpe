@@ -773,6 +773,17 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0).parse()?)
     }
+    /// Reset the current values of the negative and positive end-stop parameters set for channel `ch`
+    /// of an RSM to values stored in controller NV-RAM.
+    pub fn reset_end_stops(&mut self, slot: Slot, ch: ModuleChannel) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("MMR {} {}", slot, ch),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

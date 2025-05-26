@@ -69,6 +69,7 @@ impl From<Slot> for u8 {
 /// Supported serial modes for the controller
 #[pyclass]
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive_more(Display)]
 pub enum SerialInterface {
     Rs422,
     Usb,
@@ -144,6 +145,7 @@ impl FromStr for Module {
 
 /// The operation modes supported by the controller
 #[derive(Debug, Clone, PartialEq)]
+#[derive_more(Display)]
 pub enum ControllerOpMode {
     Basedrive,
     Servodrive,
@@ -153,11 +155,13 @@ pub enum ControllerOpMode {
 /// Serial connection mode to the controller. Used in type-state-builder
 /// pattern for controller creation
 #[derive(Debug, Clone, PartialEq)]
+#[derive_more(Display)]
 pub struct Serial;
 
 /// Network connection mode to the controller. Used in type-state-builder
 /// pattern for controller creation
 #[derive(Debug, Clone, PartialEq)]
+#[derive_more(Display)]
 pub struct Network;
 
 /// Connection mode to the controller. Used internally by the controller

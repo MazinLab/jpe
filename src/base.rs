@@ -104,9 +104,9 @@ impl Command {
 }
 // Type-state Builder states for the BaseControllerBuilder
 #[derive(Debug, Clone, PartialEq, derive_more::Display)]
-pub struct Init;
-struct Serial;
-struct Network;
+pub(crate) struct Init;
+pub(crate) struct Serial;
+pub(crate) struct Network;
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
@@ -981,16 +981,16 @@ impl BaseControllerBuilder<Init> {
     /// Continues in the path to build the controller using serial (USB or RS-422).
     pub fn with_serial(
         self,
-        com_port: String,
-        serial_num: String,
+        com_port: &str,
+        serial_num: &str,
         baud_rate: u32,
     ) -> BaseControllerBuilder<Serial> {
         BaseControllerBuilder {
             conn_mode: ConnMode::Serial,
             ip_addr: None,
             net_conn: None,
-            com_port: Some(com_port),
-            serial_num: Some(serial_num),
+            com_port: Some(com_port.to_string()),
+            serial_num: Some(serial_num.to_string()),
             baud_rate: Some(baud_rate),
             _state: Serial,
         }
@@ -1069,7 +1069,7 @@ impl BaseControllerBuilder<Serial> {
     }
 }
 impl BaseControllerBuilder<Network> {
-    fn build() -> BaseController {
+    pub fn build(self) -> BaseResult<BaseController> {
         todo!("Need to determine whether the controller supports TCP or UDP...")
     }
 }

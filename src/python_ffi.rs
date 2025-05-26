@@ -3,15 +3,15 @@
 use std::str::FromStr;
 
 use crate::{
-    base::Error,
+    base::{BaseController, BaseControllerBuilder, Error, Init, Network, Serial},
     config::{
         ConnMode, ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
         SetpointPosMode, Slot,
     },
 };
 use pyo3::exceptions::{
-    PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyUnicodeError,
-    PyValueError,
+    PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyRuntimeError,
+    PyUnicodeError, PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyType;
@@ -301,5 +301,84 @@ impl SetpointPosMode {
     }
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!("{:?}", self))
+    }
+}
+
+// ======= Base Controller Builder Extensions =======
+// To enable the type-state builder pattern in Python,
+// need to wrap the current generic builder in individual
+// types that map to a class for each state.
+
+#[pyclass(name = "BaseControllerBuilder")]
+pub struct PyBuilderInit {
+    inner: Option<BaseControllerBuilder<Init>>,
+}
+#[pymethods]
+impl PyBuilderInit {
+    #[new]
+    fn new() -> Self {
+        Self {
+            inner: Some(BaseControllerBuilder::new()),
+        }
+    }
+    fn with_serial(
+        &mut self,
+        com_port: &str,
+        serial_num: &str,
+        baud: u32,
+    ) -> PyResult<PyBaseBuilderSerial> {
+        // Python does not support moving self without putting something
+        // back.
+        let inner = self
+            .inner
+            .take()
+            .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
+
+        Ok(PyBaseBuilderSerial {
+            inner: Some(inner.with_serial(com_port, serial_num, baud)),
+        })
+    }
+
+    fn with_network(&mut self, ip_addr: &str) -> PyResult<PyBaseBuilderNetwork> {
+        // Python does not support moving self without putting something
+        // back.
+        let inner = self
+            .inner
+            .take()
+            .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
+
+        Ok(PyBaseBuilderNetwork {
+            inner: Some(inner.with_network(ip_addr)),
+        })
+    }
+}
+
+#[pyclass(name = "BaseWithSerial")]
+pub struct PyBaseBuilderSerial {
+    inner: Option<BaseControllerBuilder<Serial>>,
+}
+#[pymethods]
+impl PyBaseBuilderSerial {
+    fn build(&mut self) -> PyResult<BaseController> {
+        let inner = self
+            .inner
+            .take()
+            .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
+        Ok(inner.build()?)
+    }
+}
+
+#[pyclass(name = "BaseWithNetwork")]
+pub struct PyBaseBuilderNetwork {
+    inner: Option<BaseControllerBuilder<Network>>,
+}
+#[pymethods]
+impl PyBaseBuilderNetwork {
+    fn build(&mut self) -> PyResult<BaseController> {
+        let inner = self
+            .inner
+            .take()
+            .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
+        Ok(inner.build()?)
     }
 }

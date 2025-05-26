@@ -320,3 +320,7 @@ impl SetpointPosMode {
         Ok(format!("{:?}", self))
     }
 }
+
+// ======= Controller Extension Methods =======
+// Used to make methods on the Controller ergonomic
+// for Python users

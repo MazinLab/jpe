@@ -105,7 +105,7 @@ impl Command {
 }
 
 /// Abstract, central representation of the Controller
-//#[derive(Debug)]
+#[derive(Debug)]
 #[pyclass(unsendable)] // Not supporting movement between threads at this time in Python.
 pub struct BaseController {
     /// Mode used to connect to the controller
@@ -363,6 +363,48 @@ impl BaseController {
 }
 
 // ======= External API =======
+// Only methods that are exposed publically in Rust (not Python compatible without extension)
+
+impl BaseController {
+    /// Sets the IP configuration for the LAN interface
+    pub fn set_ip_config(
+        &mut self,
+        addr_mode: IpAddrMode,
+        ip_addr: Ipv4Addr,
+        mask: Ipv4Addr,
+        gateway: Ipv4Addr,
+    ) -> BaseResult<String> {
+        let cmd = match addr_mode {
+            IpAddrMode::Dhcp => Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                &format!(
+                    "{} {} {} {} {}",
+                    "/IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
+                ),
+            ),
+            IpAddrMode::Static => Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                &format!(
+                    "{} {} {} {} {}",
+                    "/IPS",
+                    "STATIC",
+                    ip_addr.to_string(),
+                    mask.to_string(),
+                    gateway.to_string()
+                ),
+            ),
+        };
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
+        Ok(v.remove(0))
+    }
+}
+
+// ======= PyO3 Compatible External API =======
+// Contains methods that are externally accessible from Rust and Python (without extension)
+// along with private methods (Rust) that extended externally accessible Rust methods
+// that are not directly compatible with Python.
 #[pymethods]
 impl BaseController {
     /// Returns the firmware version of the controller and updates internal value.
@@ -412,39 +454,7 @@ impl BaseController {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/IPR");
         Ok(self.handle_command(&cmd, Some(5), None)?)
     }
-    /// Sets the IP configuration for the LAN interface
-    pub fn set_ip_config(
-        &mut self,
-        addr_mode: IpAddrMode,
-        ip_addr: Ipv4Addr,
-        mask: Ipv4Addr,
-        gateway: Ipv4Addr,
-    ) -> BaseResult<String> {
-        let cmd = match addr_mode {
-            IpAddrMode::Dhcp => Command::new(
-                ModuleScope::Any,
-                ModeScope::Any,
-                &format!(
-                    "{} {} {} {} {}",
-                    "/IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
-                ),
-            ),
-            IpAddrMode::Static => Command::new(
-                ModuleScope::Any,
-                ModeScope::Any,
-                &format!(
-                    "{} {} {} {} {}",
-                    "/IPS",
-                    "STATIC",
-                    ip_addr.to_string(),
-                    mask.to_string(),
-                    gateway.to_string()
-                ),
-            ),
-        };
-        let mut v = self.handle_command(&cmd, Some(1), None)?;
-        Ok(v.remove(0))
-    }
+
     /// Get baudrate setting for the USB or RS-422 interface
     pub fn get_baud_rate(&mut self, ifc: SerialInterface) -> BaseResult<u32> {
         let cmd = match ifc {

@@ -122,6 +122,7 @@ pub struct BaseController {
     read_buffer: Vec<u8>,
     /// Internal representation of the installed modules
     modules: [Option<Module>; 6],
+    supported_stages: Vec<String>,
 }
 // ======= Internal API =======
 impl BaseController {
@@ -314,6 +315,7 @@ impl BaseController {
             baud_rate,
             read_buffer: vec![0; READ_BUF_SIZE],
             modules: [None; 6],
+            supported_stages: Vec::new(),
         }
     }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
@@ -509,6 +511,58 @@ impl BaseController {
         } else {
             Err(Error::InvalidParams(format!("Slot {} is empty", slot)))
         }
+    }
+    /// Starts moving an actuator or positioner with specified parameters. Supported on
+    /// CADM2 modules.
+    pub fn move_stage(
+        &mut self,
+        slot: Slot,
+        direction: Direction,
+        step_freq: u16,
+        r_step_size: u8,
+        n_steps: u16,
+        temp: u16,
+        stage: &str,
+        drive_factor: f32,
+    ) -> BaseResult<String> {
+        // Bounds check all the input variables
+        if ![
+            STEP_FREQ_BOUNDS.contains(&step_freq),
+            RELATIVE_ACTUATOR_STEP_SIZE_BOUND.contains(&r_step_size),
+            NUM_STEPS_BOUNDS.contains(&n_steps),
+            TEMP_BOUNDS.contains(&temp),
+            DRIVE_FACTOR_BOUNDS.contains(&drive_factor),
+        ]
+        .iter()
+        .all(|cond| *cond)
+        {
+            return Err(Error::Bound("Input parameter out of bounds.".to_string()));
+        }
+
+        // Check to see if the slot is populated
+        if !self.modules[u8::from(slot.clone()) as usize - 1].is_some() {
+            return Err(Error::DeviceError(format!("Slot {} is empty", slot)));
+        }
+        // Get supported stages and see if passed stage value is supported.
+        if !self.supported_stages.is_empty() {
+            self.supported_stages = self.get_supported_stages()?;
+        }
+        if !self.supported_stages.iter().any(|s| s == stage) {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+        }
+
+        // Create the command and send to controller
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Cadm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            format!(
+                "MOV {} {} {} {} {} {} {} {}",
+                slot, direction, step_freq, r_step_size, n_steps, temp, stage, drive_factor
+            )
+            .as_str(),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0))
     }
 }
 

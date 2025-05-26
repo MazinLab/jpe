@@ -7,7 +7,7 @@ use std::{
     io::{self, ErrorKind},
     marker::PhantomData,
     net::Ipv4Addr,
-    num::ParseIntError,
+    num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
     time::{Duration, Instant},
 };
@@ -54,6 +54,8 @@ pub enum Error {
     DeviceError(String),
     #[error("{0}")]
     ParseIntError(#[from] ParseIntError),
+    #[error("{0}")]
+    ParseFloatError(#[from] ParseFloatError),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -599,7 +601,7 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
-    /// Sets the CADM2 in external control mode (Flexdrive mode). Similar to MOV, but
+    /// Sets the CADM in external control mode (Flexdrive mode). Similar to MOV, but
     /// `step_freq` now defines the step frequency at maximum (absolute) input signal. By
     /// default, set this to 600 [Hz]. `direction` now modulates the stage movement direction
     /// with respect to the polarity of the external input signal (E.g Negative -> positive external signal voltage drives
@@ -647,6 +649,29 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         self.op_mode = ControllerOpMode::Flexdrive;
         Ok(v.remove(0))
+    }
+    /// Get the position of a Resistive Linear Sensor (RLS) connected to a specific channel [CH] of the RSM
+    /// module. Return value is in meters.
+    pub fn get_current_position(
+        &mut self,
+        slot: Slot,
+        ch: ModuleChannel,
+        stage: &str,
+    ) -> BaseResult<f32> {
+        // Get supported stages and see if passed stage value is supported.
+        if !self.supported_stages.is_empty() {
+            self.supported_stages = self.get_supported_stages()?;
+        }
+        if !self.supported_stages.iter().any(|s| s == stage) {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("PGV {} {} {}", slot, ch, stage),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
+        Ok(v.remove(0).parse()?)
     }
 }
 

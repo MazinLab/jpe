@@ -4,6 +4,10 @@ use std::{fmt::Display, ops::RangeInclusive, str::FromStr};
 
 pub(crate) const BAUD_BOUNDS: RangeInclusive<u32> = 9600..=1_000_000;
 pub(crate) const DRIVE_FACTOR_BOUNDS: RangeInclusive<f32> = 0.1..=3.0;
+pub(crate) const STEP_FREQ_BOUNDS: RangeInclusive<u16> = 0..=600;
+pub(crate) const RELATIVE_ACTUATOR_STEP_SIZE_BOUND: RangeInclusive<u8> = 0..=100;
+pub(crate) const NUM_STEPS_BOUNDS: RangeInclusive<u16> = 0..=50_000;
+pub(crate) const TEMP_BOUNDS: RangeInclusive<u16> = 0..=300;
 
 /// The module slot within the controller
 #[derive(Debug, Clone, PartialEq)]

@@ -171,6 +171,15 @@ pub(crate) enum ConnMode {
     Serial,
     Network,
 }
+impl Display for ConnMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ConnMode::Serial => "Serial",
+            ConnMode::Network => "Network",
+        };
+        write!(f, "{}", s)
+    }
+}
 
 /// Specific channel of a Module
 #[derive(Debug, Clone, PartialEq, Eq)]

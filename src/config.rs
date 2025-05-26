@@ -1,6 +1,9 @@
 // Contains types restricting values related to the controller API spec
 use crate::base::Error;
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, ops::RangeInclusive, str::FromStr};
+
+pub(crate) const BAUD_BOUNDS: RangeInclusive<u32> = 9600..=1_000_000;
+pub(crate) const DRIVE_FACTOR_BOUNDS: RangeInclusive<f32> = 0.1..=3.0;
 
 /// The module slot within the controller
 #[derive(Debug, Clone, PartialEq)]

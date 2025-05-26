@@ -26,7 +26,6 @@ const DEVICE_PID: u16 = 0000;
 const TERMINATOR: char = '\r';
 // Used at the start of every Command
 const MARKER: char = '/';
-const BAUD_BOUNDS: (u32, u32) = (9600, 1_000_000);
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -454,7 +453,7 @@ impl BaseController {
     }
     /// Set the baudrate for the USB or RS-422 interface on the controller.
     pub fn set_baud_rate(&mut self, ifc: SerialInterface, baud: u32) -> BaseResult<String> {
-        if baud >= BAUD_BOUNDS.0 && baud <= BAUD_BOUNDS.1 {
+        if BAUD_BOUNDS.contains(&baud) {
             let cmd = match ifc {
                 SerialInterface::Rs422 => Command::new(
                     ModuleScope::Any,
@@ -472,7 +471,9 @@ impl BaseController {
         } else {
             Err(Error::Bound(format!(
                 "Out of range for baudrate: {}-{}, got {}",
-                BAUD_BOUNDS.0, BAUD_BOUNDS.1, baud
+                BAUD_BOUNDS.start(),
+                BAUD_BOUNDS.end(),
+                baud
             )))
         }
     }

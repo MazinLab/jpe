@@ -651,7 +651,7 @@ impl BaseController {
         self.op_mode = ControllerOpMode::Flexdrive;
         Ok(v.remove(0))
     }
-    /// Get the position of a Resistive Linear Sensor (RLS) connected to a specific channel [CH] of the RSM
+    /// Get the position of a Resistive Linear Sensor (RLS) connected to a specific channel of the RSM
     /// module. Return value is in meters.
     pub fn get_current_position(
         &mut self,
@@ -670,6 +670,46 @@ impl BaseController {
         );
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0).parse()?)
+    }
+    /// Get the position of all three channels of the RSM simultaneously. Return values are in meters
+    pub fn get_current_position_all(
+        &mut self,
+        slot: Slot,
+        stage_ch1: &str,
+        stage_ch2: &str,
+        stage_ch3: &str,
+    ) -> BaseResult<(f32, f32, f32)> {
+        // Get supported stages and see if passed stage values are supported.
+        if !self.check_stage(stage_ch1)? {
+            return Err(Error::DeviceError(format!(
+                "Stage {} unsupported",
+                stage_ch1
+            )));
+        }
+        if !self.check_stage(stage_ch2)? {
+            return Err(Error::DeviceError(format!(
+                "Stage {} unsupported",
+                stage_ch2
+            )));
+        }
+        if !self.check_stage(stage_ch3)? {
+            return Err(Error::DeviceError(format!(
+                "Stage {} unsupported",
+                stage_ch3
+            )));
+        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Rsm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("PGVA {} {} {} {}", slot, stage_ch1, stage_ch2, stage_ch3),
+        );
+        let v = self
+            .handle_command(&cmd, Some(3), Some(slot))?
+            .into_iter()
+            .map(|s| s.parse().map_err(|e| Error::ParseFloatError(e)))
+            .collect::<BaseResult<Vec<f32>>>()?;
+
+        Ok((v[0], v[1], v[2]))
     }
 }
 

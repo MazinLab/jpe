@@ -4,7 +4,10 @@ use std::str::FromStr;
 
 use crate::{
     base::Error,
-    config::{IpAddrMode, Module, SerialInterface, Slot},
+    config::{
+        ConnMode, ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, Network, Serial,
+        SerialInterface, SetpointPosMode, Slot,
+    },
 };
 use pyo3::exceptions::{
     PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyUnicodeError,
@@ -47,7 +50,7 @@ impl From<Error> for PyErr {
 #[pymethods]
 impl Slot {
     #[classmethod]
-    /// Fallibly constructs a IpAddrMode object from a string.
+    /// Fallibly constructs this class from a string.
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
@@ -58,6 +61,9 @@ impl Slot {
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))
     }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
 }
 
 #[pymethods]
@@ -66,6 +72,12 @@ impl SerialInterface {
     /// Fallibly constructs class from a string.
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
+    }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
     }
 }
 
@@ -76,6 +88,12 @@ impl IpAddrMode {
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
     }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
 }
 #[pymethods]
 impl Module {
@@ -83,5 +101,88 @@ impl Module {
     /// Fallibly constructs class from a string.
     fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
         Self::from_str(s).map_err(PyErr::from)
+    }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl ControllerOpMode {
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl Serial {
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl Network {
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl ConnMode {
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl ModuleChannel {
+    #[classmethod]
+    /// Fallibly constructs this class from a string.
+    fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        Self::from_str(s).map_err(PyErr::from)
+    }
+    /// Maps a Slot object to it's
+    fn to_int(&self) -> PyResult<u8> {
+        Ok(u8::from(self.clone()))
+    }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl Direction {
+    #[classmethod]
+    /// Fallibly constructs this class from a string.
+    fn from_string(_cls: &Bound<'_, PyType>, s: &str) -> PyResult<Self> {
+        Self::from_str(s).map_err(PyErr::from)
+    }
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
+    }
+}
+#[pymethods]
+impl SetpointPosMode {
+    fn __str__(&self) -> PyResult<String> {
+        Ok(format!("{self}"))
+    }
+    fn __repr__(&self) -> PyResult<String> {
+        Ok(format!("{:?}", self))
     }
 }

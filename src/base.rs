@@ -1,5 +1,6 @@
 // Defines types and functionality related to the base controller
 use crate::config::*;
+use pyo3::prelude::*;
 use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
@@ -104,7 +105,8 @@ impl Command {
 }
 
 /// Abstract, central representation of the Controller
-#[derive(Debug)]
+//#[derive(Debug)]
+#[pyclass(unsendable)] // Not supporting movement between threads at this time in Python.
 pub struct BaseController {
     /// Mode used to connect to the controller
     conn_mode: ConnMode,
@@ -299,34 +301,6 @@ impl BaseController {
         let bytes_read = self.read_into_buffer()?;
         self.parse_response(bytes_read)
     }
-}
-
-// ======= External API =======
-impl BaseController {
-    fn new(
-        conn_mode: ConnMode,
-        ip_addr: Option<Ipv4Addr>,
-        com_port: Option<String>,
-        serial_conn: Option<Box<dyn SerialPort>>,
-        net_conn: Option<()>,
-        serial_num: Option<String>,
-        baud_rate: Option<u32>,
-    ) -> Self {
-        Self {
-            conn_mode,
-            op_mode: ControllerOpMode::Basedrive,
-            fw_vers: "".to_string(),
-            ip_addr,
-            com_port,
-            serial_conn,
-            net_conn,
-            serial_num,
-            baud_rate,
-            read_buffer: vec![0; READ_BUF_SIZE],
-            modules: [None; 6],
-            supported_stages: Vec::new(),
-        }
-    }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
     /// for the use of direct indexing into the resulting return value as a result.
     fn handle_command(
@@ -360,6 +334,36 @@ impl BaseController {
                     return Ok(v);
                 }
             }
+        }
+    }
+}
+
+// ======= External API =======
+#[pymethods]
+impl BaseController {
+    #[new]
+    fn new(
+        conn_mode: ConnMode,
+        ip_addr: Option<Ipv4Addr>,
+        com_port: Option<String>,
+        serial_conn: Option<Box<dyn SerialPort>>,
+        net_conn: Option<()>,
+        serial_num: Option<String>,
+        baud_rate: Option<u32>,
+    ) -> Self {
+        Self {
+            conn_mode,
+            op_mode: ControllerOpMode::Basedrive,
+            fw_vers: "".to_string(),
+            ip_addr,
+            com_port,
+            serial_conn,
+            net_conn,
+            serial_num,
+            baud_rate,
+            read_buffer: vec![0; READ_BUF_SIZE],
+            modules: [None; 6],
+            supported_stages: Vec::new(),
         }
     }
     /// Returns the firmware version of the controller and updates internal value.

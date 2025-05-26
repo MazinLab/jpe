@@ -823,6 +823,133 @@ impl BaseController {
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
+    /// Enable the internal position feedback control and start operating in Servodrive mode with up to three
+    /// different stages. Initial step frequency is used adjust how fast the stages initally takes steps (the control
+    /// loop will reduce this as a setpoint is approached).
+    pub fn enable_servodrive(
+        &mut self,
+        stage_1: &str,
+        init_step_freq_1: u16,
+        stage_2: &str,
+        init_step_freq_2: u16,
+        stage_3: &str,
+        init_step_freq_3: u16,
+        temp: u16,
+        drive_factor: f32,
+    ) -> BaseResult<String> {
+        // Check bounds on input params
+        if ![
+            DRIVE_FACTOR_BOUNDS.contains(&drive_factor),
+            STEP_FREQ_BOUNDS.contains(&init_step_freq_1),
+            STEP_FREQ_BOUNDS.contains(&init_step_freq_2),
+            STEP_FREQ_BOUNDS.contains(&init_step_freq_3),
+            TEMP_BOUNDS.contains(&temp),
+        ]
+        .iter()
+        .all(|b| *b)
+        {
+            return Err(Error::Bound("Input parameter out of bounds".to_string()));
+        }
+
+        // Get supported stages and see if passed stage values are supported.
+        if !self.check_stage(stage_1)? {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_1)));
+        }
+        if !self.check_stage(stage_2)? {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_2)));
+        }
+        if !self.check_stage(stage_3)? {
+            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_3)));
+        }
+
+        let cmd = Command::new(
+            ModuleScope::Any,
+            ModeScope::Any,
+            &format!(
+                "FBEN {} {} {} {} {} {} {} {}",
+                stage_1,
+                init_step_freq_1,
+                stage_2,
+                init_step_freq_2,
+                stage_3,
+                init_step_freq_3,
+                drive_factor,
+                temp
+            ),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
+        Ok(v.remove(0))
+    }
+    /// Disable the internal position feedback control.
+    pub fn disable_servodrive(&mut self) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Any,
+            ModeScope::Only(vec![ControllerOpMode::Servodrive]),
+            "FBXT",
+        );
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
+        Ok(v.remove(0))
+    }
+    /// The servodrive control loop will be immediately aborted and the actuators will stop at their current location.
+    pub fn servodrive_em_stop(&mut self) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Any,
+            ModeScope::Only(vec![ControllerOpMode::Servodrive]),
+            "FBES",
+        );
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
+        Ok(v.remove(0))
+    }
+    /// In servodrive mode, use this command to move actuators to a set point position. For linear type actuators,
+    /// setpoint values is in meters, for rotational, radians. See application notes for description of position mode.
+    /// If there is no actuator/stage connected to one of the outputs, enter 0 as position set
+    /// point.
+    pub fn go_to_setpoint(
+        &mut self,
+        set_point1: f32,
+        pos_mode_1: SetpointPosMode,
+        set_point2: f32,
+        pos_mode_2: SetpointPosMode,
+        set_point3: f32,
+        pos_mode_3: SetpointPosMode,
+    ) -> BaseResult<String> {
+        let cmd = Command::new(
+            ModuleScope::Any,
+            ModeScope::Only(vec![ControllerOpMode::Servodrive]),
+            &format!(
+                "FBCS {} {} {} {} {} {}",
+                set_point1, pos_mode_1, set_point2, pos_mode_2, set_point3, pos_mode_3,
+            ),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
+        Ok(v.remove(0))
+    }
+    /// Returns a (comma-separated) list with status and position error information for the servodrive
+    /// control loop.
+    /// Response: [ENABLED] [FINISHED] [INVALID SP1] [INVALID SP2] [INVALID SP3] [POS ERROR1] [POS ERROR2] [POS ERROR3]
+    /// NOTE: position error is dimensionless!
+    pub fn get_servodrive_status(&mut self) -> BaseResult<(u8, u8, u8, u8, u8, i64, i64, i64)> {
+        let cmd = Command::new(
+            ModuleScope::Any,
+            ModeScope::Only(vec![ControllerOpMode::Servodrive]),
+            "FBST",
+        );
+        let mut v = self.handle_command(&cmd, Some(8), None)?;
+
+        // Split the vec into it's u8 and u64 subsets
+        let v_u8 = v
+            .drain(..=4)
+            .map(|s| s.parse().map_err(|e| Error::ParseIntError(e)))
+            .collect::<BaseResult<Vec<u8>>>()?;
+
+        let v_u16 = v
+            .into_iter()
+            .map(|s| s.parse().map_err(|e| Error::ParseIntError(e)))
+            .collect::<BaseResult<Vec<i64>>>()?;
+        Ok((
+            v_u8[0], v_u8[1], v_u8[2], v_u8[3], v_u8[4], v_u16[0], v_u16[1], v_u16[2],
+        ))
+    }
 }
 
 /// Type-State Builder for the Controller type based on connection mode.

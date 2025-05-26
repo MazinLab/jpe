@@ -555,11 +555,10 @@ impl BaseController {
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Cadm]),
             ModeScope::Only(vec![ControllerOpMode::Basedrive]),
-            format!(
+            &format!(
                 "MOV {} {} {} {} {} {} {} {}",
                 slot, direction, step_freq, r_step_size, n_steps, temp, stage, drive_factor
-            )
-            .as_str(),
+            ),
         );
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
@@ -573,10 +572,31 @@ impl BaseController {
                 ControllerOpMode::Basedrive,
                 ControllerOpMode::Flexdrive,
             ]),
-            format!("STP {}", slot).as_str(),
+            &format!("STP {}", slot),
         );
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         self.op_mode = ControllerOpMode::Basedrive;
+        Ok(v.remove(0))
+    }
+    /// CADM module will output a DC voltage level (to be used with a scanner piezo for example) instead of
+    /// the default drive signal. `level` can be set to a value in between 0 and 1023 where zero represents
+    /// ~0[V] output (-30[V] with respect to REF) and the maximum value represents ~150[V]
+    /// output (+120[V] with respect to REF).
+    pub fn enable_scan_mode(&mut self, slot: Slot, level: u16) -> BaseResult<String> {
+        if !SCANNER_LEVEL_BOUNDS.contains(&level) {
+            return Err(Error::Bound(format!(
+                "Level out of range, {}-{}, got {}",
+                SCANNER_LEVEL_BOUNDS.start(),
+                SCANNER_LEVEL_BOUNDS.end(),
+                level
+            )));
+        }
+        let cmd = Command::new(
+            ModuleScope::Only(vec![Module::Cadm]),
+            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            &format!("SDC {} {}", slot, level),
+        );
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
 }

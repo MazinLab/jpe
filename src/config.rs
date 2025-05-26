@@ -8,6 +8,7 @@ pub(crate) const STEP_FREQ_BOUNDS: RangeInclusive<u16> = 0..=600;
 pub(crate) const RELATIVE_ACTUATOR_STEP_SIZE_BOUND: RangeInclusive<u8> = 0..=100;
 pub(crate) const NUM_STEPS_BOUNDS: RangeInclusive<u16> = 0..=50_000;
 pub(crate) const TEMP_BOUNDS: RangeInclusive<u16> = 0..=300;
+pub(crate) const SCANNER_LEVEL_BOUNDS: RangeInclusive<u16> = 0..=1023;
 
 /// The module slot within the controller
 #[derive(Debug, Clone, PartialEq)]

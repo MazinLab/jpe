@@ -88,6 +88,7 @@ impl FromStr for SerialInterface {
 }
 
 /// Supported address assignment mode for the controller.
+#[pyclass]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum IpAddrMode {
     Dhcp,

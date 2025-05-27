@@ -23,7 +23,7 @@ const READ_CHUNK_SIZE: usize = 64;
 // Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
-const TERMINATOR: char = '\r';
+const TERMINATOR: &'static str = "\r\n";
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -227,7 +227,7 @@ impl BaseController {
 
         // Comma-delimited case when there is only one carriage return in the
         // non Error path. More than one, the CrDelimited (bug) case
-        match msg.chars().filter(|c| *c == TERMINATOR).count() {
+        match msg.chars().filter(|c| *c == '\r').count() {
             1 => Ok(Response::CommaDelimited(
                 msg.strip_suffix(TERMINATOR)
                     .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?

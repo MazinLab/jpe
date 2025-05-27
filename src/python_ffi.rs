@@ -47,6 +47,7 @@ impl From<Error> for PyErr {
 
 // ======= Config Type Mappings =======
 // Python extensions for config spec types, mostly for trait methods
+// and variant constructors on enums.
 #[pymethods]
 impl Slot {
     #[classmethod]
@@ -323,8 +324,8 @@ impl PyBuilderInit {
     }
     fn with_serial(
         &mut self,
-        com_port: &str,
-        serial_num: &str,
+        com_port: Option<&str>,
+        serial_num: Option<&str>,
         baud: u32,
     ) -> PyResult<PyBaseBuilderSerial> {
         // Python does not support moving self without putting something
@@ -383,6 +384,8 @@ impl PyBaseBuilderNetwork {
     }
 }
 
+/// Used to register all types that are to be accessible
+/// via Python with the centralized PyModule
 pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBuilderInit>()?;
     m.add_class::<PyBaseBuilderSerial>()?;

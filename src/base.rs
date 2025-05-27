@@ -5,8 +5,8 @@ use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
-    io::{self, ErrorKind},
-    net::{AddrParseError, Ipv4Addr},
+    io::{self, ErrorKind, Read, Write},
+    net::{AddrParseError, Ipv4Addr, TcpStream},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
     time::{Duration, Instant},
@@ -20,10 +20,12 @@ const STOPBITS: StopBits = StopBits::One;
 const READ_BUF_SIZE: usize = 4096;
 // Used with serial readers to set the chunk size for reading from the serial buffer
 const READ_CHUNK_SIZE: usize = 64;
+const READ_CHUNK_TIMEOUT: Duration = Duration::from_millis(20);
 // Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
-const TERMINATOR: char = '\r';
+const TCP_PORT: u16 = 2000;
+const TERMINATOR: &'static str = "\r\n";
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -103,7 +105,6 @@ impl Command {
     }
 }
 // Type-state Builder states for the BaseControllerBuilder
-#[derive(Debug, Clone, PartialEq, derive_more::Display)]
 pub(crate) struct Init;
 pub(crate) struct Serial;
 pub(crate) struct Network;
@@ -117,9 +118,9 @@ pub struct BaseController {
     op_mode: ControllerOpMode,
     /// Firmware version of all modules
     fw_vers: String,
-    ip_addr: Option<Ipv4Addr>,
+    ip_addr: Option<String>,
     /// Network connection handle (if using network)
-    net_conn: Option<()>, // Not sure which type this will be, based on UDP or TCP support.
+    net_conn: Option<TcpStream>,
     /// Name of the serial port (if in serial mode)
     com_port: Option<String>,
     /// Serial connection handle (if using serial)
@@ -136,10 +137,10 @@ pub struct BaseController {
 impl BaseController {
     fn new(
         conn_mode: ConnMode,
-        ip_addr: Option<Ipv4Addr>,
+        ip_addr: Option<String>,
         com_port: Option<String>,
         serial_conn: Option<Box<dyn SerialPort>>,
-        net_conn: Option<()>,
+        net_conn: Option<TcpStream>,
         serial_num: Option<String>,
         baud_rate: Option<u32>,
     ) -> Self {
@@ -227,7 +228,7 @@ impl BaseController {
 
         // Comma-delimited case when there is only one carriage return in the
         // non Error path. More than one, the CrDelimited (bug) case
-        match msg.chars().filter(|c| *c == TERMINATOR).count() {
+        match msg.chars().filter(|c| *c == '\r').count() {
             1 => Ok(Response::CommaDelimited(
                 msg.strip_suffix(TERMINATOR)
                     .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
@@ -247,29 +248,45 @@ impl BaseController {
     /// Higher level read function that reads from any given media into the
     /// internal read buffer.
     fn read_into_buffer(&mut self) -> BaseResult<usize> {
-        todo!()
+        match self.conn_mode {
+            ConnMode::Serial => {
+                let reader = self.serial_conn.as_mut().ok_or(Error::WrongConnMode {
+                    expected: ConnMode::Serial,
+                    found: ConnMode::Network,
+                })?;
+                let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
+                // Clear input stream and return bytes read
+                reader.clear(serialport::ClearBuffer::Input)?;
+                Ok(bytes_read)
+            }
+            ConnMode::Network => {
+                let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
+                    expected: ConnMode::Network,
+                    found: ConnMode::Serial,
+                })?;
+                let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
+                // Clear input stream  and return bytes read
+                self.clear_tcp_recv_buf()?;
+                Ok(bytes_read)
+            }
+        }
     }
-    /// Low-level reader for the USB connection mode
-    fn read_usb_chunks(&mut self) -> BaseResult<usize> {
-        // Clear the internal read buffer and create a local chunk buffer.
-        self.read_buffer.fill(0);
+    /// Low-level reader for all connections
+    fn read_chunks<T: Read>(read_buf: &mut [u8], reader: &mut T) -> BaseResult<usize> {
+        // Clear the read buffer and create a local chunk buffer.
+        read_buf.fill(0);
         let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
 
         // Loop to read in chunks and iteratively add to internal read buffer
         // until total timeout is reached.
         let read_timer_start = Instant::now();
         let mut total_bytes_read = 0usize;
-        let reader = self.serial_conn.as_mut().ok_or(Error::WrongConnMode {
-            expected: ConnMode::Serial,
-            found: ConnMode::Network,
-        })?;
 
         loop {
             match reader.read(&mut chunk_buf) {
                 Ok(chunk_bytes_read) => {
-                    if let Some(buf_slice) = self
-                        .read_buffer
-                        .get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
+                    if let Some(buf_slice) =
+                        read_buf.get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
                     {
                         // Happy path, haven't exceeded read buffer capacity
                         buf_slice.copy_from_slice(&chunk_buf[..chunk_bytes_read]);
@@ -277,37 +294,68 @@ impl BaseController {
                     } else {
                         // Read buffer overrun case, read from chunk buf until
                         // input buf is full and break early.
-                        if let Some(bytes_left) = (total_bytes_read + chunk_bytes_read)
-                            .checked_sub(self.read_buffer.len())
+                        if let Some(bytes_left) =
+                            (total_bytes_read + chunk_bytes_read).checked_sub(read_buf.len())
                         {
                             // Know the exact number of bytes to read, can use unsafe accesses
-                            self.read_buffer[total_bytes_read..total_bytes_read + bytes_left]
+                            read_buf[total_bytes_read..total_bytes_read + bytes_left]
                                 .copy_from_slice(&chunk_buf[..bytes_left]);
                             total_bytes_read += bytes_left
                         } else {
                             return Err(Error::General(
-                                "Logic error in read buf overrun case, got negative difference between buf len and total bytes read.".to_string(),
+                                "Logic error in read buf overrun case.
+                                 Got negative difference between buf len and total bytes read."
+                                    .to_string(),
                             ));
                         }
                         break;
                     }
                 }
-                // If chunk times out, just keep iterating until total timeout
-                Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
+                // If chunk times out, just keep iterating until total timeout with
+                // brief pause.
+                Err(ref e)
+                    if e.kind() == ErrorKind::TimedOut
+                        || e.kind() == ErrorKind::Interrupted
+                        || e.kind() == ErrorKind::WouldBlock =>
+                {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
                 Err(e) => return Err(Error::Io(e)),
             }
-            if read_timer_start.elapsed() > READ_TIMEOUT {
+            // Break out cases
+            if read_timer_start.elapsed() > READ_TIMEOUT
+                || read_buf.ends_with(TERMINATOR.as_bytes())
+            {
                 break;
             }
         }
-        // Clear the input buffer of any residual junk and return bytes read
-        reader.clear(serialport::ClearBuffer::Input)?;
         Ok(total_bytes_read)
     }
-
+    /// Used to keep the request/response paradigm in sync by draining
+    /// the recv buffer of the TcpStream
+    fn clear_tcp_recv_buf(&mut self) -> BaseResult<()> {
+        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
+        let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
+            expected: ConnMode::Network,
+            found: ConnMode::Serial,
+        })?;
+        // Drain any remanining data from stream.
+        loop {
+            match reader.read(&mut chunk_buf) {
+                // Stream has been closed.
+                Ok(0) => break,
+                // Discard any data that is read
+                Ok(_) => continue,
+                // No data to read, waiting on OS to present more data.
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
+                Err(e) => return Err(Error::Io(e)),
+            }
+        }
+        Ok(())
+    }
     // Handles the interplay between polling the device and capturing the
     // acknowledgment that most API functions will use.
-    fn comm_handler(&mut self, cmd: &Command) -> BaseResult<Response> {
+    fn comms_handler(&mut self, cmd: &Command) -> BaseResult<Response> {
         // encode and send data on wire
         match self.conn_mode {
             ConnMode::Serial => {
@@ -315,14 +363,15 @@ impl BaseController {
                     handle.clear(serialport::ClearBuffer::Output)?;
                     handle.write_all(cmd.payload.as_bytes())?;
                 } else {
-                    return Err(Error::WrongConnMode {
-                        expected: ConnMode::Serial,
-                        found: ConnMode::Network,
-                    });
+                    return Err(Error::General("Serial handle not found.".to_string()));
                 }
             }
             ConnMode::Network => {
-                todo!()
+                if let Some(ref mut handle) = self.net_conn {
+                    handle.write_all(cmd.payload.as_bytes())?;
+                } else {
+                    return Err(Error::General("Network handle not found.".to_string()));
+                }
             }
         }
         // Read raw data and try dispatching for local parsing
@@ -343,7 +392,7 @@ impl BaseController {
                 "Invalid command for current controller state".to_string(),
             ));
         }
-        let resp = self.comm_handler(&cmd)?;
+        let resp = self.comms_handler(&cmd)?;
         match resp {
             Response::Error(s) => Err(Error::DeviceError(s)),
             Response::CrDelimited(v) | Response::CommaDelimited(v) => {
@@ -958,8 +1007,7 @@ impl BaseController {
 /// Type-State Builder for the Controller type based on connection mode.
 pub struct BaseControllerBuilder<T> {
     conn_mode: ConnMode,
-    ip_addr: Option<Ipv4Addr>,
-    net_conn: Option<()>,
+    ip_addr: Option<String>,
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
@@ -972,7 +1020,6 @@ impl BaseControllerBuilder<Init> {
             com_port: None,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            net_conn: None,
             serial_num: None,
             baud_rate: None,
             _state: Init,
@@ -981,23 +1028,29 @@ impl BaseControllerBuilder<Init> {
     /// Continues in the path to build the controller using serial (USB or RS-422).
     pub fn with_serial(
         self,
-        com_port: &str,
-        serial_num: &str,
+        com_port: Option<&str>,
+        serial_num: Option<&str>,
         baud_rate: u32,
     ) -> BaseControllerBuilder<Serial> {
         BaseControllerBuilder {
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            net_conn: None,
-            com_port: Some(com_port.to_string()),
-            serial_num: Some(serial_num.to_string()),
+            com_port: com_port.map(|s| s.into()),
+            serial_num: serial_num.map(|s| s.into()),
             baud_rate: Some(baud_rate),
             _state: Serial,
         }
     }
     /// Continies in the path to build the controller using IP.
     pub fn with_network(self, ip_addr: &str) -> BaseControllerBuilder<Network> {
-        todo!()
+        BaseControllerBuilder {
+            conn_mode: ConnMode::Network,
+            ip_addr: Some(ip_addr.to_string()),
+            com_port: None,
+            serial_num: None,
+            baud_rate: None,
+            _state: Network,
+        }
     }
 }
 impl BaseControllerBuilder<Serial> {
@@ -1031,7 +1084,7 @@ impl BaseControllerBuilder<Serial> {
                 .stop_bits(STOPBITS)
                 .open()?,
             ),
-            self.net_conn,
+            None,
             self.serial_num,
             self.baud_rate,
         ))
@@ -1070,7 +1123,23 @@ impl BaseControllerBuilder<Serial> {
 }
 impl BaseControllerBuilder<Network> {
     pub fn build(self) -> BaseResult<BaseController> {
-        todo!("Need to determine whether the controller supports TCP or UDP...")
+        let ip_addr = self
+            .ip_addr
+            .expect("IP address required to get to build method.");
+
+        // Try to connect to TCP socket and return newly built instance
+        let tcp_con = TcpStream::connect(format!("{}:{}", ip_addr.as_str(), TCP_PORT))?;
+        tcp_con.set_nonblocking(true)?;
+
+        Ok(BaseController::new(
+            self.conn_mode,
+            Some(ip_addr),
+            self.com_port,
+            None,
+            Some(tcp_con),
+            self.serial_num,
+            self.baud_rate,
+        ))
     }
 }
 /// Used to register all types that are to be accessible

@@ -119,7 +119,7 @@ pub struct BaseController {
     op_mode: ControllerOpMode,
     /// Firmware version of all modules
     fw_vers: String,
-    ip_addr: Option<Ipv4Addr>,
+    ip_addr: Option<String>,
     /// Network connection handle (if using network)
     net_conn: Option<TcpStream>,
     /// Name of the serial port (if in serial mode)
@@ -138,7 +138,7 @@ pub struct BaseController {
 impl BaseController {
     fn new(
         conn_mode: ConnMode,
-        ip_addr: Option<Ipv4Addr>,
+        ip_addr: Option<String>,
         com_port: Option<String>,
         serial_conn: Option<Box<dyn SerialPort>>,
         net_conn: Option<TcpStream>,
@@ -1004,8 +1004,7 @@ impl BaseController {
 /// Type-State Builder for the Controller type based on connection mode.
 pub struct BaseControllerBuilder<T> {
     conn_mode: ConnMode,
-    ip_addr: Option<Ipv4Addr>,
-    net_conn: Option<TcpStream>,
+    ip_addr: Option<String>,
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
@@ -1018,7 +1017,6 @@ impl BaseControllerBuilder<Init> {
             com_port: None,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            net_conn: None,
             serial_num: None,
             baud_rate: None,
             _state: Init,
@@ -1034,7 +1032,6 @@ impl BaseControllerBuilder<Init> {
         BaseControllerBuilder {
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            net_conn: None,
             com_port: Some(com_port.to_string()),
             serial_num: Some(serial_num.to_string()),
             baud_rate: Some(baud_rate),
@@ -1043,7 +1040,14 @@ impl BaseControllerBuilder<Init> {
     }
     /// Continies in the path to build the controller using IP.
     pub fn with_network(self, ip_addr: &str) -> BaseControllerBuilder<Network> {
-        todo!()
+        BaseControllerBuilder {
+            conn_mode: ConnMode::Network,
+            ip_addr: Some(ip_addr.to_string()),
+            com_port: None,
+            serial_num: None,
+            baud_rate: None,
+            _state: Network,
+        }
     }
 }
 impl BaseControllerBuilder<Serial> {
@@ -1077,7 +1081,7 @@ impl BaseControllerBuilder<Serial> {
                 .stop_bits(STOPBITS)
                 .open()?,
             ),
-            self.net_conn,
+            None,
             self.serial_num,
             self.baud_rate,
         ))
@@ -1116,7 +1120,23 @@ impl BaseControllerBuilder<Serial> {
 }
 impl BaseControllerBuilder<Network> {
     pub fn build(self) -> BaseResult<BaseController> {
-        todo!("Need to determine whether the controller supports TCP or UDP...")
+        let ip_addr = self
+            .ip_addr
+            .expect("IP address required to get to build method.");
+
+        // Try to connect to TCP socket and return newly built instance
+        let tcp_con = TcpStream::connect(format!("{}::{}", ip_addr.as_str(), TCP_PORT))?;
+        tcp_con.set_nonblocking(true)?;
+
+        Ok(BaseController::new(
+            self.conn_mode,
+            Some(ip_addr),
+            self.com_port,
+            None,
+            Some(tcp_con),
+            self.serial_num,
+            self.baud_rate,
+        ))
     }
 }
 /// Used to register all types that are to be accessible

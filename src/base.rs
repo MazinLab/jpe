@@ -247,10 +247,13 @@ impl BaseController {
     /// Higher level read function that reads from any given media into the
     /// internal read buffer.
     fn read_into_buffer(&mut self) -> BaseResult<usize> {
-        todo!()
+        match self.conn_mode {
+            ConnMode::Serial => self.read_serial_chunks(),
+            ConnMode::Network => todo!(),
+        }
     }
-    /// Low-level reader for the USB connection mode
-    fn read_usb_chunks(&mut self) -> BaseResult<usize> {
+    /// Low-level reader for the serial connection modes
+    fn read_serial_chunks(&mut self) -> BaseResult<usize> {
         // Clear the internal read buffer and create a local chunk buffer.
         self.read_buffer.fill(0);
         let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
@@ -296,7 +299,10 @@ impl BaseController {
                 Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
                 Err(e) => return Err(Error::Io(e)),
             }
-            if read_timer_start.elapsed() > READ_TIMEOUT {
+            // Break out cases
+            if read_timer_start.elapsed() > READ_TIMEOUT
+                || self.read_buffer.ends_with(TERMINATOR.as_bytes())
+            {
                 break;
             }
         }
@@ -307,7 +313,7 @@ impl BaseController {
 
     // Handles the interplay between polling the device and capturing the
     // acknowledgment that most API functions will use.
-    fn comm_handler(&mut self, cmd: &Command) -> BaseResult<Response> {
+    fn comms_handler(&mut self, cmd: &Command) -> BaseResult<Response> {
         // encode and send data on wire
         match self.conn_mode {
             ConnMode::Serial => {
@@ -343,7 +349,7 @@ impl BaseController {
                 "Invalid command for current controller state".to_string(),
             ));
         }
-        let resp = self.comm_handler(&cmd)?;
+        let resp = self.comms_handler(&cmd)?;
         match resp {
             Response::Error(s) => Err(Error::DeviceError(s)),
             Response::CrDelimited(v) | Response::CommaDelimited(v) => {

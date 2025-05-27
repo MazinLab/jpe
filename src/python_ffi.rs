@@ -382,3 +382,10 @@ impl PyBaseBuilderNetwork {
         Ok(inner.build()?)
     }
 }
+
+pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyBuilderInit>()?;
+    m.add_class::<PyBaseBuilderSerial>()?;
+    m.add_class::<PyBaseBuilderNetwork>()?;
+    Ok(())
+}

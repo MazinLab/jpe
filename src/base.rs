@@ -1073,8 +1073,9 @@ impl BaseControllerBuilder<Network> {
         todo!("Need to determine whether the controller supports TCP or UDP...")
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
+/// Used to register all types that are to be accessible
+/// via Python with the centralized PyModule
+pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<BaseController>()?;
+    Ok(())
 }

@@ -257,3 +257,18 @@ impl Display for SetpointPosMode {
         write!(f, "{}", s)
     }
 }
+
+/// Used to register all types that are to be accessible
+/// via Python with the centralized PyModule
+pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<Slot>()?;
+    m.add_class::<SerialInterface>()?;
+    m.add_class::<IpAddrMode>()?;
+    m.add_class::<Module>()?;
+    m.add_class::<ControllerOpMode>()?;
+    m.add_class::<ConnMode>()?;
+    m.add_class::<ModuleChannel>()?;
+    m.add_class::<Direction>()?;
+    m.add_class::<SetpointPosMode>()?;
+    Ok(())
+}

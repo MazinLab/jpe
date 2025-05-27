@@ -5,8 +5,7 @@ use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
-    fs::read,
-    io::{self, ErrorKind, Read},
+    io::{self, ErrorKind, Read, Write},
     net::{AddrParseError, Ipv4Addr, TcpStream},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
@@ -368,7 +367,11 @@ impl BaseController {
                 }
             }
             ConnMode::Network => {
-                todo!()
+                if let Some(ref mut handle) = self.net_conn {
+                    handle.write_all(cmd.payload.as_bytes())?;
+                } else {
+                    return Err(Error::General("Network handle not found.".to_string()));
+                }
             }
         }
         // Read raw data and try dispatching for local parsing
@@ -1125,7 +1128,7 @@ impl BaseControllerBuilder<Network> {
             .expect("IP address required to get to build method.");
 
         // Try to connect to TCP socket and return newly built instance
-        let tcp_con = TcpStream::connect(format!("{}::{}", ip_addr.as_str(), TCP_PORT))?;
+        let tcp_con = TcpStream::connect(format!("{}:{}", ip_addr.as_str(), TCP_PORT))?;
         tcp_con.set_nonblocking(true)?;
 
         Ok(BaseController::new(

@@ -5,6 +5,7 @@ use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
+    fs::read,
     io::{self, ErrorKind, Read},
     net::{AddrParseError, Ipv4Addr, TcpStream},
     num::{ParseFloatError, ParseIntError},
@@ -249,32 +250,44 @@ impl BaseController {
     /// internal read buffer.
     fn read_into_buffer(&mut self) -> BaseResult<usize> {
         match self.conn_mode {
-            ConnMode::Serial => self.read_serial_chunks(),
-            ConnMode::Network => todo!(),
+            ConnMode::Serial => {
+                let reader = self.serial_conn.as_mut().ok_or(Error::WrongConnMode {
+                    expected: ConnMode::Serial,
+                    found: ConnMode::Network,
+                })?;
+                let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
+                // Clear input stream and return bytes read
+                reader.clear(serialport::ClearBuffer::Input)?;
+                Ok(bytes_read)
+            }
+            ConnMode::Network => {
+                let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
+                    expected: ConnMode::Network,
+                    found: ConnMode::Serial,
+                })?;
+                let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
+                // Clear input stream  and return bytes read
+                self.clear_tcp_recv_buf()?;
+                Ok(bytes_read)
+            }
         }
     }
-    /// Low-level reader for the serial connection modes.
-    /// Returns bytes read.
-    fn read_serial_chunks(&mut self) -> BaseResult<usize> {
-        // Clear the internal read buffer and create a local chunk buffer.
-        self.read_buffer.fill(0);
+    /// Low-level reader for all connections
+    fn read_chunks<T: Read>(read_buf: &mut [u8], reader: &mut T) -> BaseResult<usize> {
+        // Clear the read buffer and create a local chunk buffer.
+        read_buf.fill(0);
         let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
 
         // Loop to read in chunks and iteratively add to internal read buffer
         // until total timeout is reached.
         let read_timer_start = Instant::now();
         let mut total_bytes_read = 0usize;
-        let reader = self.serial_conn.as_mut().ok_or(Error::WrongConnMode {
-            expected: ConnMode::Serial,
-            found: ConnMode::Network,
-        })?;
 
         loop {
             match reader.read(&mut chunk_buf) {
                 Ok(chunk_bytes_read) => {
-                    if let Some(buf_slice) = self
-                        .read_buffer
-                        .get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
+                    if let Some(buf_slice) =
+                        read_buf.get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
                     {
                         // Happy path, haven't exceeded read buffer capacity
                         buf_slice.copy_from_slice(&chunk_buf[..chunk_bytes_read]);
@@ -282,34 +295,41 @@ impl BaseController {
                     } else {
                         // Read buffer overrun case, read from chunk buf until
                         // input buf is full and break early.
-                        if let Some(bytes_left) = (total_bytes_read + chunk_bytes_read)
-                            .checked_sub(self.read_buffer.len())
+                        if let Some(bytes_left) =
+                            (total_bytes_read + chunk_bytes_read).checked_sub(read_buf.len())
                         {
                             // Know the exact number of bytes to read, can use unsafe accesses
-                            self.read_buffer[total_bytes_read..total_bytes_read + bytes_left]
+                            read_buf[total_bytes_read..total_bytes_read + bytes_left]
                                 .copy_from_slice(&chunk_buf[..bytes_left]);
                             total_bytes_read += bytes_left
                         } else {
                             return Err(Error::General(
-                                "Logic error in read buf overrun case, got negative difference between buf len and total bytes read.".to_string(),
+                                "Logic error in read buf overrun case.
+                                 Got negative difference between buf len and total bytes read."
+                                    .to_string(),
                             ));
                         }
                         break;
                     }
                 }
-                // If chunk times out, just keep iterating until total timeout
-                Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
+                // If chunk times out, just keep iterating until total timeout with
+                // brief pause.
+                Err(ref e)
+                    if e.kind() == ErrorKind::TimedOut
+                        || e.kind() == ErrorKind::Interrupted
+                        || e.kind() == ErrorKind::WouldBlock =>
+                {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
                 Err(e) => return Err(Error::Io(e)),
             }
             // Break out cases
             if read_timer_start.elapsed() > READ_TIMEOUT
-                || self.read_buffer.ends_with(TERMINATOR.as_bytes())
+                || read_buf.ends_with(TERMINATOR.as_bytes())
             {
                 break;
             }
         }
-        // Clear the input buffer of any residual junk and return bytes read
-        reader.clear(serialport::ClearBuffer::Input)?;
         Ok(total_bytes_read)
     }
     /// Used to keep the request/response paradigm in sync by draining
@@ -320,8 +340,7 @@ impl BaseController {
             expected: ConnMode::Network,
             found: ConnMode::Serial,
         })?;
-        // Set in non-blocking mode and drain any remanining data from stream.
-        reader.set_nonblocking(true)?;
+        // Drain any remanining data from stream.
         loop {
             match reader.read(&mut chunk_buf) {
                 // Stream has been closed.
@@ -333,68 +352,8 @@ impl BaseController {
                 Err(e) => return Err(Error::Io(e)),
             }
         }
-        reader.set_nonblocking(false)?;
         Ok(())
     }
-    /// Low-level reader for the network connection mode.
-    /// Returns bytes read.
-    fn read_network_chunks(&mut self) -> BaseResult<usize> {
-        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
-
-        // Loop to read in chunks and iteratively add to internal read buffer
-        // until total timeout is reached.
-        let read_timer_start = Instant::now();
-        let mut total_bytes_read = 0usize;
-        let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
-            expected: ConnMode::Network,
-            found: ConnMode::Serial,
-        })?;
-        // Set in non-blocking mode and drain any remanining data from stream.
-        reader.set_nonblocking(true)?;
-
-        loop {
-            match reader.read(&mut chunk_buf) {
-                Ok(chunk_bytes_read) => {
-                    if let Some(buf_slice) = self
-                        .read_buffer
-                        .get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
-                    {
-                        // Happy path, haven't exceeded read buffer capacity
-                        buf_slice.copy_from_slice(&chunk_buf[..chunk_bytes_read]);
-                        total_bytes_read += chunk_bytes_read;
-                    } else {
-                        // Read buffer overrun case, read from chunk buf until
-                        // input buf is full and break early.
-                        if let Some(bytes_left) = (total_bytes_read + chunk_bytes_read)
-                            .checked_sub(self.read_buffer.len())
-                        {
-                            // Know the exact number of bytes to read, can use unsafe accesses
-                            self.read_buffer[total_bytes_read..total_bytes_read + bytes_left]
-                                .copy_from_slice(&chunk_buf[..bytes_left]);
-                            total_bytes_read += bytes_left
-                        } else {
-                            return Err(Error::General(
-                                "Logic error in read buf overrun case, got negative difference between buf len and total bytes read.".to_string(),
-                            ));
-                        }
-                        break;
-                    }
-                }
-                // If chunk times out, just keep iterating until total timeout
-                Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
-                Err(e) => return Err(Error::Io(e)),
-            }
-            // Break out cases
-            if read_timer_start.elapsed() > READ_TIMEOUT
-                || self.read_buffer.ends_with(TERMINATOR.as_bytes())
-            {
-                break;
-            }
-        }
-        // return bytes read
-        Ok(total_bytes_read)
-    }
-
     // Handles the interplay between polling the device and capturing the
     // acknowledgment that most API functions will use.
     fn comms_handler(&mut self, cmd: &Command) -> BaseResult<Response> {

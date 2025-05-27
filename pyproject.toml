@@ -6,5 +6,7 @@ build-backend = "maturin"
 name = "jpe_python"
 version = "0.1.0"
 description = "Python extension from Rust for low-level JPE stage/actuator control"
-authors = ["Josh Breckenridge", "MazinLab Contributors"]
+authors = [
+  {name = "Josh Breckenridge", email = "breckeja@ucsb.edu"},
+]
 requires-python = ">=3.7"

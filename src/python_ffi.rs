@@ -324,8 +324,8 @@ impl PyBuilderInit {
     }
     fn with_serial(
         &mut self,
-        com_port: &str,
-        serial_num: &str,
+        com_port: Option<&str>,
+        serial_num: Option<&str>,
         baud: u32,
     ) -> PyResult<PyBaseBuilderSerial> {
         // Python does not support moving self without putting something

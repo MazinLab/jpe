@@ -1025,15 +1025,15 @@ impl BaseControllerBuilder<Init> {
     /// Continues in the path to build the controller using serial (USB or RS-422).
     pub fn with_serial(
         self,
-        com_port: &str,
-        serial_num: &str,
+        com_port: Option<&str>,
+        serial_num: Option<&str>,
         baud_rate: u32,
     ) -> BaseControllerBuilder<Serial> {
         BaseControllerBuilder {
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            com_port: Some(com_port.to_string()),
-            serial_num: Some(serial_num.to_string()),
+            com_port: com_port.map(|s| s.into()),
+            serial_num: serial_num.map(|s| s.into()),
             baud_rate: Some(baud_rate),
             _state: Serial,
         }

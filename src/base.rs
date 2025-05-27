@@ -1,12 +1,12 @@
 // Defines types and functionality related to the base controller
 use crate::config::*;
+use pyo3::prelude::*;
 use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
     io::{self, ErrorKind},
-    marker::PhantomData,
-    net::Ipv4Addr,
+    net::{AddrParseError, Ipv4Addr},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
     time::{Duration, Instant},
@@ -24,8 +24,6 @@ const READ_CHUNK_SIZE: usize = 64;
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
 const TERMINATOR: char = '\r';
-// Used at the start of every Command
-const MARKER: char = '/';
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
@@ -56,6 +54,8 @@ pub enum Error {
     ParseIntError(#[from] ParseIntError),
     #[error("{0}")]
     ParseFloatError(#[from] ParseFloatError),
+    #[error("{0}")]
+    AddrParseError(#[from] AddrParseError),
 }
 
 pub type BaseResult<T> = std::result::Result<T, Error>;
@@ -102,9 +102,15 @@ impl Command {
         }
     }
 }
+// Type-state Builder states for the BaseControllerBuilder
+#[derive(Debug, Clone, PartialEq, derive_more::Display)]
+pub(crate) struct Init;
+pub(crate) struct Serial;
+pub(crate) struct Network;
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
+#[pyclass(unsendable)] // Not supporting movement between threads at this time in Python.
 pub struct BaseController {
     /// Mode used to connect to the controller
     conn_mode: ConnMode,
@@ -128,6 +134,30 @@ pub struct BaseController {
 }
 // ======= Internal API =======
 impl BaseController {
+    fn new(
+        conn_mode: ConnMode,
+        ip_addr: Option<Ipv4Addr>,
+        com_port: Option<String>,
+        serial_conn: Option<Box<dyn SerialPort>>,
+        net_conn: Option<()>,
+        serial_num: Option<String>,
+        baud_rate: Option<u32>,
+    ) -> Self {
+        Self {
+            conn_mode,
+            op_mode: ControllerOpMode::Basedrive,
+            fw_vers: "".to_string(),
+            ip_addr,
+            com_port,
+            serial_conn,
+            net_conn,
+            serial_num,
+            baud_rate,
+            read_buffer: vec![0; READ_BUF_SIZE],
+            modules: [None; 6],
+            supported_stages: Vec::new(),
+        }
+    }
     /// Checks whether a command is valid given the current state of the hardware
     fn check_command(&self, cmd: &Command, slot: Option<Slot>) -> bool {
         let opmode_check = match &cmd.allowed_mode {
@@ -299,34 +329,6 @@ impl BaseController {
         let bytes_read = self.read_into_buffer()?;
         self.parse_response(bytes_read)
     }
-}
-
-// ======= External API =======
-impl BaseController {
-    fn new(
-        conn_mode: ConnMode,
-        ip_addr: Option<Ipv4Addr>,
-        com_port: Option<String>,
-        serial_conn: Option<Box<dyn SerialPort>>,
-        net_conn: Option<()>,
-        serial_num: Option<String>,
-        baud_rate: Option<u32>,
-    ) -> Self {
-        Self {
-            conn_mode,
-            op_mode: ControllerOpMode::Basedrive,
-            fw_vers: "".to_string(),
-            ip_addr,
-            com_port,
-            serial_conn,
-            net_conn,
-            serial_num,
-            baud_rate,
-            read_buffer: vec![0; READ_BUF_SIZE],
-            modules: [None; 6],
-            supported_stages: Vec::new(),
-        }
-    }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
     /// for the use of direct indexing into the resulting return value as a result.
     fn handle_command(
@@ -362,6 +364,53 @@ impl BaseController {
             }
         }
     }
+}
+
+// ======= External API =======
+// Only methods that are exposed publically in Rust (not Python compatible without extension)
+
+impl BaseController {
+    /// Sets the IP configuration for the LAN interface
+    pub fn set_ip_config(
+        &mut self,
+        addr_mode: IpAddrMode,
+        ip_addr: Ipv4Addr,
+        mask: Ipv4Addr,
+        gateway: Ipv4Addr,
+    ) -> BaseResult<String> {
+        let cmd = match addr_mode {
+            IpAddrMode::Dhcp => Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                &format!(
+                    "{} {} {} {} {}",
+                    "/IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
+                ),
+            ),
+            IpAddrMode::Static => Command::new(
+                ModuleScope::Any,
+                ModeScope::Any,
+                &format!(
+                    "{} {} {} {} {}",
+                    "/IPS",
+                    "STATIC",
+                    ip_addr.to_string(),
+                    mask.to_string(),
+                    gateway.to_string()
+                ),
+            ),
+        };
+        let mut v = self.handle_command(&cmd, Some(1), None)?;
+        Ok(v.remove(0))
+    }
+}
+
+// ======= PyO3 Compatible External API =======
+// Contains methods that are externally accessible from Rust and Python (without extension)
+// along with PRIVATE methods (Rust) that extended externally accessible Rust methods
+// that are not directly compatible with Python.
+#[pymethods]
+impl BaseController {
     /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {
@@ -409,39 +458,18 @@ impl BaseController {
         let cmd = Command::new(ModuleScope::Any, ModeScope::Any, "/IPR");
         Ok(self.handle_command(&cmd, Some(5), None)?)
     }
-    /// Sets the IP configuration for the LAN interface
-    pub fn set_ip_config(
+    /// Private python extension method for the `set_ip_config`. Sets the IP address
+    /// configuration for the controller.
+    fn set_ip_config_py(
         &mut self,
         addr_mode: IpAddrMode,
-        ip_addr: Ipv4Addr,
-        mask: Ipv4Addr,
-        gateway: Ipv4Addr,
+        ip_addr: &str,
+        mask: &str,
+        gateway: &str,
     ) -> BaseResult<String> {
-        let cmd = match addr_mode {
-            IpAddrMode::Dhcp => Command::new(
-                ModuleScope::Any,
-                ModeScope::Any,
-                &format!(
-                    "{} {} {} {} {}",
-                    "/IPS", "DHCP", "0.0.0.0", "0.0.0.0", "0.0.0.0"
-                ),
-            ),
-            IpAddrMode::Static => Command::new(
-                ModuleScope::Any,
-                ModeScope::Any,
-                &format!(
-                    "{} {} {} {} {}",
-                    "/IPS",
-                    "STATIC",
-                    ip_addr.to_string(),
-                    mask.to_string(),
-                    gateway.to_string()
-                ),
-            ),
-        };
-        let mut v = self.handle_command(&cmd, Some(1), None)?;
-        Ok(v.remove(0))
+        self.set_ip_config(addr_mode, ip_addr.parse()?, mask.parse()?, gateway.parse()?)
     }
+
     /// Get baudrate setting for the USB or RS-422 interface
     pub fn get_baud_rate(&mut self, ifc: SerialInterface) -> BaseResult<u32> {
         let cmd = match ifc {
@@ -935,21 +963,44 @@ pub struct BaseControllerBuilder<T> {
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
-    /// Used since we don't care about using T in data members
-    _marker: PhantomData<T>,
+    _state: T,
 }
-impl BaseControllerBuilder<Serial> {
-    pub fn new(com_port: Option<String>, serial_num: Option<String>, baud_rate: u32) -> Self {
+impl BaseControllerBuilder<Init> {
+    /// Starts the type-state builder pattern
+    pub fn new() -> BaseControllerBuilder<Init> {
         Self {
-            com_port,
+            com_port: None,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
             net_conn: None,
-            serial_num,
-            baud_rate: Some(baud_rate),
-            _marker: PhantomData,
+            serial_num: None,
+            baud_rate: None,
+            _state: Init,
         }
     }
+    /// Continues in the path to build the controller using serial (USB or RS-422).
+    pub fn with_serial(
+        self,
+        com_port: &str,
+        serial_num: &str,
+        baud_rate: u32,
+    ) -> BaseControllerBuilder<Serial> {
+        BaseControllerBuilder {
+            conn_mode: ConnMode::Serial,
+            ip_addr: None,
+            net_conn: None,
+            com_port: Some(com_port.to_string()),
+            serial_num: Some(serial_num.to_string()),
+            baud_rate: Some(baud_rate),
+            _state: Serial,
+        }
+    }
+    /// Continies in the path to build the controller using IP.
+    pub fn with_network(self, ip_addr: &str) -> BaseControllerBuilder<Network> {
+        todo!()
+    }
+}
+impl BaseControllerBuilder<Serial> {
     /// Builds the controller type and tries to connect over serial.
     pub fn build(self) -> BaseResult<BaseController> {
         // Try and find the serial port that the device is connected
@@ -1018,7 +1069,13 @@ impl BaseControllerBuilder<Serial> {
     }
 }
 impl BaseControllerBuilder<Network> {
-    fn new() -> BaseController {
+    pub fn build(self) -> BaseResult<BaseController> {
         todo!("Need to determine whether the controller supports TCP or UDP...")
     }
+}
+/// Used to register all types that are to be accessible
+/// via Python with the centralized PyModule
+pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<BaseController>()?;
+    Ok(())
 }

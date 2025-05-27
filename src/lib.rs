@@ -3,7 +3,7 @@ pub mod base;
 pub mod config;
 pub mod python_ffi;
 
-// Define the Python module that exposes all Pyo3 API to python users.
+// Define the Python module that exposes Pyo3 API to python users.
 #[pymodule]
 #[pyo3(name = "jpe_python")]
 fn py_module(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {

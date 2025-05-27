@@ -103,7 +103,6 @@ impl Command {
     }
 }
 // Type-state Builder states for the BaseControllerBuilder
-#[derive(Debug, Clone, PartialEq, derive_more::Display)]
 pub(crate) struct Init;
 pub(crate) struct Serial;
 pub(crate) struct Network;
@@ -321,10 +320,7 @@ impl BaseController {
                     handle.clear(serialport::ClearBuffer::Output)?;
                     handle.write_all(cmd.payload.as_bytes())?;
                 } else {
-                    return Err(Error::WrongConnMode {
-                        expected: ConnMode::Serial,
-                        found: ConnMode::Network,
-                    });
+                    return Err(Error::General("Serial handle not found.".to_string()));
                 }
             }
             ConnMode::Network => {

@@ -5,8 +5,8 @@ use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
-    io::{self, ErrorKind},
-    net::{AddrParseError, Ipv4Addr},
+    io::{self, ErrorKind, Read},
+    net::{AddrParseError, Ipv4Addr, TcpStream},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
     time::{Duration, Instant},
@@ -23,6 +23,7 @@ const READ_CHUNK_SIZE: usize = 64;
 // Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(200);
 const DEVICE_PID: u16 = 0000;
+const TCP_PORT: u16 = 2000;
 const TERMINATOR: &'static str = "\r\n";
 
 /// Errors for the base controller api
@@ -118,7 +119,7 @@ pub struct BaseController {
     fw_vers: String,
     ip_addr: Option<Ipv4Addr>,
     /// Network connection handle (if using network)
-    net_conn: Option<()>, // Not sure which type this will be, based on UDP or TCP support.
+    net_conn: Option<TcpStream>,
     /// Name of the serial port (if in serial mode)
     com_port: Option<String>,
     /// Serial connection handle (if using serial)
@@ -138,7 +139,7 @@ impl BaseController {
         ip_addr: Option<Ipv4Addr>,
         com_port: Option<String>,
         serial_conn: Option<Box<dyn SerialPort>>,
-        net_conn: Option<()>,
+        net_conn: Option<TcpStream>,
         serial_num: Option<String>,
         baud_rate: Option<u32>,
     ) -> Self {
@@ -308,6 +309,30 @@ impl BaseController {
         // Clear the input buffer of any residual junk and return bytes read
         reader.clear(serialport::ClearBuffer::Input)?;
         Ok(total_bytes_read)
+    }
+    /// Used to keep the request/response paradigm in sync by draining
+    /// the recv buffer of the TcpStream
+    fn clear_tcp_recv_buf(&mut self) -> BaseResult<()> {
+        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
+        let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
+            expected: ConnMode::Network,
+            found: ConnMode::Serial,
+        })?;
+        // Set in non-blocking mode and drain any remanining data from stream.
+        reader.set_nonblocking(true)?;
+        loop {
+            match reader.read(&mut chunk_buf) {
+                // Stream has been closed.
+                Ok(0) => break,
+                // Discard any data that is read
+                Ok(_) => continue,
+                // No data to read, waiting on OS to present more data.
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
+                Err(e) => return Err(Error::Io(e)),
+            }
+        }
+        reader.set_nonblocking(false)?;
+        Ok(())
     }
 
     // Handles the interplay between polling the device and capturing the
@@ -961,7 +986,7 @@ impl BaseController {
 pub struct BaseControllerBuilder<T> {
     conn_mode: ConnMode,
     ip_addr: Option<Ipv4Addr>,
-    net_conn: Option<()>,
+    net_conn: Option<TcpStream>,
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,

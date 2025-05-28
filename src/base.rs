@@ -996,12 +996,12 @@ impl BaseController {
             .map(|s| s.parse().map_err(|e| Error::ParseIntError(e)))
             .collect::<BaseResult<Vec<u8>>>()?;
 
-        let v_u16 = v
+        let v_i64 = v
             .into_iter()
             .map(|s| s.parse().map_err(|e| Error::ParseIntError(e)))
             .collect::<BaseResult<Vec<i64>>>()?;
         Ok((
-            v_u8[0], v_u8[1], v_u8[2], v_u8[3], v_u8[4], v_u16[0], v_u16[1], v_u16[2],
+            v_u8[0], v_u8[1], v_u8[2], v_u8[3], v_u8[4], v_i64[0], v_i64[1], v_i64[2],
         ))
     }
 }

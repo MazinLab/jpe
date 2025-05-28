@@ -940,6 +940,7 @@ impl BaseController {
             "FBXT",
         );
         let mut v = self.handle_command(&cmd, Some(1), None)?;
+        self.op_mode = ControllerOpMode::Basedrive;
         Ok(v.remove(0))
     }
     /// The servodrive control loop will be immediately aborted and the actuators will stop at their current location.
@@ -950,6 +951,7 @@ impl BaseController {
             "FBES",
         );
         let mut v = self.handle_command(&cmd, Some(1), None)?;
+        self.op_mode = ControllerOpMode::Basedrive;
         Ok(v.remove(0))
     }
     /// In servodrive mode, use this command to move actuators to a set point position. For linear type actuators,

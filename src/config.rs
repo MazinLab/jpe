@@ -118,6 +118,7 @@ pub(crate) enum Module {
     Oem,
     Psm,
     Edm,
+    _Empty,
 }
 impl TryFrom<String> for Module {
     type Error = Error;
@@ -138,6 +139,7 @@ impl FromStr for Module {
             _ if s.starts_with("oem") => Ok(Self::Oem),
             _ if s.starts_with("psm") => Ok(Self::Psm),
             _ if s.starts_with("edm") => Ok(Self::Edm),
+            _ if s == "-" => Ok(Self::_Empty),
             _ => Err(Error::InvalidResponse(format!("Unknown module: {}", s))),
         }
     }

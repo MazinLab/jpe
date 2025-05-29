@@ -250,7 +250,9 @@ impl BaseController {
                     .collect(),
             )),
             _ => Err(Error::InvalidResponse(
-                "Bad terminator, detected no carriage return.".to_string(),
+                "Malformed response
+                "
+                .to_string(),
             )),
         }
     }
@@ -502,7 +504,13 @@ impl BaseController {
             .collect::<BaseResult<Vec<Module>>>()?
             .iter()
             .enumerate()
-            .for_each(|(idx, new_mod)| self.modules[idx] = Some(new_mod.clone()));
+            .for_each(|(idx, new_mod)| {
+                if let Module::_Empty = new_mod {
+                    self.modules[idx] = None
+                } else {
+                    self.modules[idx] = Some(new_mod.clone())
+                }
+            });
         Ok(v)
     }
     /// Returns a list of supported actuator and stage types
@@ -1158,4 +1166,230 @@ impl BaseControllerBuilder<Network> {
 pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BaseController>()?;
     Ok(())
+}
+// ========== Tests ==========
+// NOTE: These are integration tests, but PyO3 currently has a bug that (at least in 0.25.0) that
+// does not allow for using integration tests as a separate crate (recommened). The workarounds
+// listed in the issue and in the FAQ do not work for MacOS (aarch64-apple-darwin).
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::{
+        fs::remove_file,
+        io::ErrorKind,
+        path::Path,
+        process::{Child, Command},
+        sync::mpsc::{Sender, channel},
+        thread::{JoinHandle, sleep},
+        time::Duration,
+    };
+    use uuid::Uuid;
+
+    const PORT1_ALIAS_PREFIX: &'static str = "/tmp/ttyV0";
+    const PORT2_ALIAS_PREFIX: &'static str = "/tmp/ttyV1";
+    const SETUP_WAIT_TIME: Duration = Duration::from_millis(200);
+
+    /// Baud is requried to be 0 with PTY ports on MacOS with serialport!
+    const BAUD: u32 = 0;
+
+    /// Used in tests to simulate connecting to the device over serial.
+    /// Uses `socat` under the hood to create a linked virtual port pair.
+    /// The aliases usually should be created in /tmp
+    struct VirtualSerialPortPair {
+        proc: Child,
+        /// Port alias to the virtual tty port 1
+        port_1: String,
+        /// Port alias to the virtual tty port 2
+        port_2: String,
+    }
+    impl VirtualSerialPortPair {
+        fn new() -> Self {
+            // Build aliases specific to this port
+            let id = Uuid::new_v4();
+            let port_1 = format!("{}_{}", PORT1_ALIAS_PREFIX, id);
+            let port_2 = format!("{}_{}", PORT2_ALIAS_PREFIX, id);
+
+            // Cleanup old virtual ports if they happen to exist
+            _ = remove_file(&port_1);
+            _ = remove_file(&port_2);
+
+            // Call socat to build port pair in new child process
+            let socat_process = Command::new("socat")
+                .arg(format!("PTY,link={},raw,echo=0", &port_1))
+                .arg(format!("PTY,link={},raw,echo=0", &port_2))
+                .spawn()
+                .expect("Socat process failed to spawn.");
+
+            // Verify the ports exist after some dead time
+            sleep(SETUP_WAIT_TIME);
+            assert!(Path::new(&port_1).exists());
+            assert!(Path::new(&port_2).exists());
+
+            Self {
+                proc: socat_process,
+                port_1,
+                port_2,
+            }
+        }
+    }
+
+    impl Drop for VirtualSerialPortPair {
+        fn drop(&mut self) {
+            // Signal to kill the process then wait until it returns
+            // dead.
+            let _ = self.proc.kill();
+            let _ = self.proc.wait();
+
+            // Remove the aliases from tmp
+            _ = remove_file(&self.port_1);
+            _ = remove_file(&self.port_2);
+        }
+    }
+
+    /// Mock controller used to test serial reads/writes from the API
+    /// in a concurrent fashion.
+    struct MockSerialResponder {
+        thread_handle: Option<JoinHandle<()>>,
+    }
+    impl MockSerialResponder {
+        fn new(port: &str, query: &[u8], resp: &[u8]) -> (Self, Sender<()>) {
+            let mut port = serialport::new(port, BAUD)
+                .timeout(Duration::from_millis(100))
+                .open()
+                .expect(&format!("Could not open serial port on {}", port));
+
+            let q = query.to_vec();
+            let r = resp.to_vec();
+            let (tx_port, rx_port) = channel::<()>();
+
+            let handle = std::thread::spawn(move || {
+                let mut buf = [0u8; 256];
+                loop {
+                    // Look for the stop signal
+                    if rx_port.try_recv().is_ok() {
+                        break;
+                    }
+                    match port.read(&mut buf) {
+                        Ok(n_bytes_read) => {
+                            // Check to see if the bytes read equals the given
+                            // query
+                            if &buf[..n_bytes_read] == q.as_slice() {
+                                let _ =
+                                    port.write_all(r.as_slice()).expect("Failed on mock write.");
+                            }
+                            break;
+                        }
+                        // If chunk times out, just keep iterating until total timeout
+                        Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
+                        Err(_) => break,
+                    }
+                }
+            });
+            (
+                Self {
+                    thread_handle: Some(handle),
+                },
+                tx_port,
+            )
+        }
+    }
+    impl Drop for MockSerialResponder {
+        fn drop(&mut self) {
+            // Clean up thread
+            let _ = self
+                .thread_handle
+                .take()
+                .expect("Thread should always spawn if constructed")
+                .join();
+        }
+    }
+
+    fn setup_mock_and_base(
+        query: &[u8],
+        resp: &[u8],
+        pty_port_a: &str,
+        pty_port_b: &str,
+    ) -> (MockSerialResponder, BaseController, Sender<()>) {
+        let controller = BaseControllerBuilder::new()
+            .with_serial(Some(pty_port_a), None, BAUD)
+            .build()
+            .expect("Port is fake, should exist.");
+
+        let (mock_device, stop_ch) = MockSerialResponder::new(pty_port_b, query, resp);
+
+        (mock_device, controller, stop_ch)
+    }
+    #[test]
+    fn test_virtual_serial_port_pair() {
+        let _ = VirtualSerialPortPair::new();
+    }
+    #[test]
+    fn test_base_controller_bad_terminator() {
+        let from_api = b"/VER\r\n";
+        let from_mock_device = b"v8.0.20220221/";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller.get_fw_version();
+        assert!(res.is_err());
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_fw_version() {
+        let from_api = b"/VER\r\n";
+        let from_mock_device = b"v8.0.20220221\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let _ = controller
+            .get_fw_version()
+            .expect("Valid mock response given.");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_modlist() {
+        let from_api = b"/MODLIST\r\n";
+        let from_mock_device = b"CADM2,CADM2,RSM,OEM2,-,EDM\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .get_module_list()
+            .expect("Valid mock response given.");
+        assert_eq!(res.len(), 6);
+        assert_eq!(res[0].as_str(), "CADM2");
+        assert_eq!(res[1].as_str(), "CADM2");
+        assert_eq!(res[2].as_str(), "RSM");
+        assert_eq!(res[3].as_str(), "OEM2");
+        assert_eq!(res[4].as_str(), "-");
+        assert_eq!(res[5].as_str(), "EDM");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
 }

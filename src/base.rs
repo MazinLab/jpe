@@ -9,7 +9,7 @@ use std::{
     marker::PhantomData,
     net::{AddrParseError, Ipv4Addr, TcpStream},
     num::{ParseFloatError, ParseIntError},
-    str::Utf8Error,
+    str::{FromStr, Utf8Error},
     time::{Duration, Instant},
 };
 use thiserror::Error;
@@ -500,17 +500,11 @@ impl BaseController {
         // from the controller. The modules in the interim vector below are guaranteed to be valid modules due to early return.
         // Length is also guaranteed to be correct due to command handler method.
         v.iter()
-            .map(|mod_str| Module::try_from(mod_str.clone()))
+            .map(|mod_str| Module::from_str(mod_str))
             .collect::<BaseResult<Vec<Module>>>()?
             .iter()
             .enumerate()
-            .for_each(|(idx, new_mod)| {
-                if let Module::_Empty = new_mod {
-                    self.modules[idx] = None
-                } else {
-                    self.modules[idx] = Some(new_mod.clone())
-                }
-            });
+            .for_each(|(idx, new_mod)| self.modules[idx] = Some(new_mod.clone()));
         Ok(v)
     }
     /// Returns a list of supported actuator and stage types

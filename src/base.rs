@@ -6,6 +6,7 @@ use serialport::{
 };
 use std::{
     io::{self, ErrorKind, Read, Write},
+    marker::PhantomData,
     net::{AddrParseError, Ipv4Addr, TcpStream},
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
@@ -105,9 +106,9 @@ impl Command {
     }
 }
 // Type-state Builder states for the BaseControllerBuilder
-pub(crate) struct Init;
-pub(crate) struct Serial;
-pub(crate) struct Network;
+pub struct Init;
+pub struct Serial;
+pub struct Network;
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
@@ -210,6 +211,7 @@ impl BaseController {
     fn parse_response(&self, bytes_read: usize) -> BaseResult<Response> {
         // First, make sure index into the buffer is valid, then try to convert
         // from bytes to &str since all bytes should be ASCII.
+
         let msg = std::str::from_utf8(self.read_buffer.get(..bytes_read).ok_or(
             Error::BufOverflow {
                 max_len: self.read_buffer.len(),
@@ -231,17 +233,24 @@ impl BaseController {
         match msg.chars().filter(|c| *c == '\r').count() {
             1 => Ok(Response::CommaDelimited(
                 msg.strip_suffix(TERMINATOR)
-                    .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
+                    .ok_or(Error::InvalidResponse(
+                        "Bad terminator in Comma Delimited branch".to_string(),
+                    ))?
                     .split(|c| c == ',')
                     .map(|slice| slice.to_string())
                     .collect(),
             )),
-            _ => Ok(Response::CrDelimited(
+            2.. => Ok(Response::CrDelimited(
                 msg.strip_suffix(TERMINATOR)
-                    .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
+                    .ok_or(Error::InvalidResponse(
+                        "Bad terminator CR delimited branch".to_string(),
+                    ))?
                     .split(|c| c == '\r')
                     .map(|slice| slice.to_string())
                     .collect(),
+            )),
+            _ => Err(Error::InvalidResponse(
+                "Bad terminator, detected no carriage return.".to_string(),
             )),
         }
     }
@@ -1013,7 +1022,7 @@ pub struct BaseControllerBuilder<T> {
     com_port: Option<String>,
     serial_num: Option<String>,
     baud_rate: Option<u32>,
-    _state: T,
+    _marker: PhantomData<T>,
 }
 impl BaseControllerBuilder<Init> {
     /// Starts the type-state builder pattern
@@ -1024,7 +1033,7 @@ impl BaseControllerBuilder<Init> {
             ip_addr: None,
             serial_num: None,
             baud_rate: None,
-            _state: Init,
+            _marker: PhantomData,
         }
     }
     /// Continues in the path to build the controller using serial (USB or RS-422).
@@ -1040,7 +1049,7 @@ impl BaseControllerBuilder<Init> {
             com_port: com_port.map(|s| s.into()),
             serial_num: serial_num.map(|s| s.into()),
             baud_rate: Some(baud_rate),
-            _state: Serial,
+            _marker: PhantomData,
         }
     }
     /// Continies in the path to build the controller using IP.
@@ -1051,7 +1060,7 @@ impl BaseControllerBuilder<Init> {
             com_port: None,
             serial_num: None,
             baud_rate: None,
-            _state: Network,
+            _marker: PhantomData,
         }
     }
 }

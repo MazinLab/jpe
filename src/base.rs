@@ -1367,4 +1367,76 @@ mod test {
         // Make sure reader thread is cleaned up.
         let _ = stop_ch.send(());
     }
+    #[test]
+    fn test_base_controller_mod_fw_version() {
+        let from_api = b"FIV 1\r\n";
+        let from_mock_device = b"CADM2.7.3.20210802\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .get_mod_fw_version(Slot::One)
+            .expect("Valid mock response given.");
+        assert_eq!(res, "CADM2.7.3.20210802");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_get_baud_rate() {
+        let from_api = b"/GBR RS422\r\n";
+        let from_mock_device = b"9600\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .get_baud_rate(SerialInterface::Rs422)
+            .expect("Valid mock response given.");
+        assert_eq!(res, 9600);
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_get_ip_settings() {
+        let from_api = b"/IPR\r\n";
+        let from_mock_device =
+            b"DHCP,192.168.15.62,255.255.255.0,192.168.15.125,40:2e:71:90:e4:8a\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .get_ip_config()
+            .expect("Valid mock response given.");
+        assert_eq!(res.len(), 5);
+        assert_eq!(res[0], "DHCP");
+        assert_eq!(res[1], "192.168.15.62");
+        assert_eq!(res[2], "255.255.255.0");
+        assert_eq!(res[3], "192.168.15.125");
+        assert_eq!(res[4], "40:2e:71:90:e4:8a");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
 }

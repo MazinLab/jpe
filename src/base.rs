@@ -1316,6 +1316,26 @@ mod test {
         let _ = stop_ch.send(());
     }
     #[test]
+    fn test_base_controller_invalid_slot() {
+        let from_api = b"FIV 1\r\n";
+        let from_mock_device = b"";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller.get_mod_fw_version(Slot::Three);
+        assert!(res.is_err());
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
     fn test_base_controller_fw_version() {
         let from_api = b"/VER\r\n";
         let from_mock_device = b"v8.0.20220221\r\n";

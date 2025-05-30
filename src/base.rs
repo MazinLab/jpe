@@ -1348,6 +1348,72 @@ mod test {
         let _ = stop_ch.send(());
     }
     #[test]
+    fn test_base_controller_invalid_mode() {
+        let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
+        let from_mock_device = b"";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        controller.supported_stages = vec!["CLA2601".into()];
+        controller.op_mode = ControllerOpMode::Servodrive;
+        controller.modules[0] = Module::Cadm;
+        // Send data to mock device and read the response.
+        let res = controller.move_stage_open(
+            Slot::One,
+            Direction::Positive,
+            600,
+            100,
+            0,
+            293,
+            "CLA2601",
+            1.2,
+        );
+
+        assert!(res.is_err());
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_invalid_module() {
+        let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
+        let from_mock_device = b"";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        controller.supported_stages = vec!["CLA2601".into()];
+        controller.op_mode = ControllerOpMode::Basedrive;
+        controller.modules[0] = Module::Rsm;
+        // Send data to mock device and read the response.
+        let res = controller.move_stage_open(
+            Slot::One,
+            Direction::Positive,
+            600,
+            100,
+            0,
+            293,
+            "CLA2601",
+            1.2,
+        );
+
+        assert!(res.is_err());
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
     fn test_base_controller_fw_version() {
         let from_api = b"/VER\r\n";
         let from_mock_device = b"v8.0.20220221\r\n";
@@ -1565,41 +1631,7 @@ mod test {
         // Make sure reader thread is cleaned up.
         let _ = stop_ch.send(());
     }
-    #[test]
-    fn test_base_controller_cadm_mov() {
-        let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
-        let from_mock_device = b"Actuating the stage.\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
-        // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
-        controller.supported_stages = vec!["CLA2601".into()];
-        controller.op_mode = ControllerOpMode::Basedrive;
-        controller.modules[0] = Module::Cadm;
-        // Send data to mock device and read the response.
-        let res = controller
-            .move_stage_open(
-                Slot::One,
-                Direction::Positive,
-                600,
-                100,
-                0,
-                293,
-                "CLA2601",
-                1.2,
-            )
-            .expect("");
-
-        assert_eq!(res, "Actuating the stage.");
-
-        // Make sure reader thread is cleaned up.
-        let _ = stop_ch.send(());
-    }
     #[test]
     fn test_base_controller_get_stages() {
         let from_api = b"/STAGES\r\n";

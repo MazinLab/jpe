@@ -5,6 +5,7 @@ use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
 use std::{
+    fmt::Display,
     io::{self, ErrorKind, Read, Write},
     marker::PhantomData,
     net::{AddrParseError, Ipv4Addr, TcpStream},
@@ -105,6 +106,12 @@ impl Command {
         }
     }
 }
+impl Display for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = self.payload.split_whitespace().next().unwrap_or("Unknown");
+        write!(f, "{}", s)
+    }
+}
 // Type-state Builder states for the BaseControllerBuilder
 pub struct Init;
 pub struct Serial;
@@ -161,12 +168,17 @@ impl BaseController {
         }
     }
     /// Checks whether a command is valid given the current state of the hardware
-    fn check_command(&self, cmd: &Command, slot: Option<Slot>) -> bool {
-        let opmode_check = match &cmd.allowed_mode {
+    fn check_command(&self, cmd: &Command, slot: Option<Slot>) -> BaseResult<()> {
+        if !match &cmd.allowed_mode {
             ModeScope::Any => true,
             ModeScope::Only(modes) => modes.contains(&self.op_mode),
-        };
-        let mod_check = match (&cmd.allowed_mod, slot) {
+        } {
+            return Err(Error::InvalidParams(format!(
+                "Unsupported command: '{}', in mode: '{}'",
+                &cmd, self.op_mode
+            )));
+        }
+        if !match (&cmd.allowed_mod, &slot) {
             (ModuleScope::Any, _) => true,
             (ModuleScope::Only(mods), Some(slot)) => match slot {
                 Slot::One => mods.contains(&self.modules[0]),
@@ -178,8 +190,17 @@ impl BaseController {
             },
             // This is a non-expected path, but should return true if it is used.
             (ModuleScope::Only(_), None) => true,
-        };
-        mod_check && opmode_check
+        } {
+            // SAFETY: The number of slots is mapped to the size the const array.
+            // Indexing here should be safe.
+            return Err(Error::InvalidParams(format!(
+                "Unsupported command: '{}', for module: '{}'",
+                &cmd,
+                self.modules
+                    [u8::from(slot.expect("Slot always present in false case.")) as usize - 1]
+            )));
+        }
+        Ok(())
     }
     /// Checks whether a given stage value is supported by the controller
     fn check_stage(&mut self, stage: &str) -> BaseResult<bool> {
@@ -375,11 +396,8 @@ impl BaseController {
         slot: Option<Slot>,
     ) -> BaseResult<Vec<String>> {
         // Check to verify if command is valid
-        if !self.check_command(cmd, slot) {
-            return Err(Error::InvalidParams(
-                "Invalid command for current controller state".to_string(),
-            ));
-        }
+        self.check_command(cmd, slot)?;
+
         let resp = self.comms_handler(&cmd)?;
         match resp {
             Response::Error(s) => Err(Error::DeviceError(s)),

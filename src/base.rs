@@ -415,10 +415,14 @@ impl BaseController {
     pub fn set_ip_config(
         &mut self,
         addr_mode: IpAddrMode,
-        ip_addr: Ipv4Addr,
-        mask: Ipv4Addr,
-        gateway: Ipv4Addr,
+        ip_addr: impl AsRef<str>,
+        mask: impl AsRef<str>,
+        gateway: impl AsRef<str>,
     ) -> BaseResult<String> {
+        let ip_addr: Ipv4Addr = ip_addr.as_ref().parse()?;
+        let mask: Ipv4Addr = mask.as_ref().parse()?;
+        let gateway: Ipv4Addr = gateway.as_ref().parse()?;
+
         let cmd = match addr_mode {
             IpAddrMode::Dhcp => Command::new(
                 ModuleScope::Any,
@@ -431,14 +435,7 @@ impl BaseController {
             IpAddrMode::Static => Command::new(
                 ModuleScope::Any,
                 ModeScope::Any,
-                &format!(
-                    "{} {} {} {} {}",
-                    "/IPS",
-                    "STATIC",
-                    ip_addr.to_string(),
-                    mask.to_string(),
-                    gateway.to_string()
-                ),
+                &format!("{} {} {} {} {}", "/IPS", "STATIC", ip_addr, mask, gateway),
             ),
         };
         let mut v = self.handle_command(&cmd, Some(1), None)?;
@@ -508,7 +505,7 @@ impl BaseController {
         mask: &str,
         gateway: &str,
     ) -> BaseResult<String> {
-        self.set_ip_config(addr_mode, ip_addr.parse()?, mask.parse()?, gateway.parse()?)
+        self.set_ip_config(addr_mode, ip_addr, mask, gateway)
     }
 
     /// Get baudrate setting for the USB or RS-422 interface
@@ -1498,9 +1495,9 @@ mod test {
         let res = controller
             .set_ip_config(
                 IpAddrMode::Static,
-                "192.168.1.10".parse().unwrap(),
-                "255.255.255.0".parse().unwrap(),
-                "192.168.1.1".parse().unwrap(),
+                "192.168.1.10",
+                "255.255.255.0",
+                "192.168.1.1",
             )
             .expect("Valid mock response given.");
         assert_eq!(res, "Restarting ...");

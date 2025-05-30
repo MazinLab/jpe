@@ -1390,6 +1390,26 @@ mod test {
         let _ = stop_ch.send(());
     }
     #[test]
+    fn test_base_controller_fw_update() {
+        let from_api = b"FU 5 Cadm2Firmware.bin\r\n";
+        let from_mock_device = b"Firmware update complete.\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller.start_mod_fw_update("Cadm2Firmware.bin", Slot::Five);
+        assert!(res.is_ok());
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
     fn test_base_controller_get_baud_rate() {
         let from_api = b"/GBR RS422\r\n";
         let from_mock_device = b"9600\r\n";
@@ -1407,6 +1427,28 @@ mod test {
             .get_baud_rate(SerialInterface::Rs422)
             .expect("Valid mock response given.");
         assert_eq!(res, 9600);
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_set_baud_rate() {
+        let from_api = b"/SBR USB 9600\r\n";
+        let from_mock_device = b"Restarting ...\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .set_baud_rate(SerialInterface::Usb, 9600)
+            .expect("Valid mock response given.");
+        assert_eq!(res, "Restarting ...");
 
         // Make sure reader thread is cleaned up.
         let _ = stop_ch.send(());
@@ -1435,6 +1477,60 @@ mod test {
         assert_eq!(res[2], "255.255.255.0");
         assert_eq!(res[3], "192.168.15.125");
         assert_eq!(res[4], "40:2e:71:90:e4:8a");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_set_ip_settings() {
+        let from_api = b"/IPS STATIC 192.168.1.10 255.255.255.0 192.168.1.1\r\n";
+        let from_mock_device = b"Restarting ...\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .set_ip_config(
+                IpAddrMode::Static,
+                "192.168.1.10".parse().unwrap(),
+                "255.255.255.0".parse().unwrap(),
+                "192.168.1.1".parse().unwrap(),
+            )
+            .expect("Valid mock response given.");
+        assert_eq!(res, "Restarting ...");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_get_stages() {
+        let from_api = b"/STAGES\r\n";
+        let from_mock_device = b"CLA2201,CLA2201-COE,CLA2201MK1,CLA2201MK1-COE,CLA2601\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .get_supported_stages()
+            .expect("Valid mock response given.");
+        assert_eq!(res.len(), 5);
+        assert!(res.contains(&"CLA2201".to_string()));
+        assert!(res.contains(&"CLA2201-COE".to_string()));
+        assert!(res.contains(&"CLA2201MK1".to_string()));
+        assert!(res.contains(&"CLA2201MK1-COE".to_string()));
+        assert!(res.contains(&"CLA2601".to_string()));
 
         // Make sure reader thread is cleaned up.
         let _ = stop_ch.send(());

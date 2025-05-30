@@ -1659,4 +1659,63 @@ mod test {
         // Make sure reader thread is cleaned up.
         let _ = stop_ch.send(());
     }
+    #[test]
+    fn test_base_controller_cadm2_mov() {
+        let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
+        let from_mock_device = b"";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        controller.supported_stages = vec!["CLA2601".into()];
+        controller.op_mode = ControllerOpMode::Basedrive;
+        controller.modules[0] = Module::Cadm;
+        // Send data to mock device and read the response.
+        let res = controller.move_stage_open(
+            Slot::One,
+            Direction::Positive,
+            600,
+            100,
+            0,
+            293,
+            "CLA2601",
+            1.2,
+        );
+
+        assert!(res.is_err());
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_cadm2_stop() {
+        let from_api = b"STP 4\r\n";
+        let from_mock_device = b"Stopping the stage.\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        controller.supported_stages = vec!["CLA2601".into()];
+        controller.op_mode = ControllerOpMode::Basedrive;
+        controller.modules[3] = Module::Cadm;
+        // Send data to mock device and read the response.
+        let res = controller
+            .stop_stage(Slot::Four)
+            .expect("Valid response given.");
+
+        assert_eq!(res, "Stopping the stage.");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
 }

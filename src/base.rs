@@ -183,7 +183,7 @@ impl BaseController {
     }
     /// Checks whether a given stage value is supported by the controller
     fn check_stage(&mut self, stage: &str) -> BaseResult<bool> {
-        if !self.supported_stages.is_empty() {
+        if self.supported_stages.is_empty() {
             self.supported_stages = self.get_supported_stages()?;
         }
         Ok(self.supported_stages.iter().any(|s| s == stage))
@@ -230,11 +230,7 @@ impl BaseController {
                     .map(|slice| slice.to_string())
                     .collect(),
             )),
-            _ => Err(Error::InvalidResponse(
-                "Malformed response
-                "
-                .to_string(),
-            )),
+            _ => Err(Error::InvalidResponse(format!("Malformed Response: {msg}"))),
         }
     }
     /// Higher level read function that reads from any given media into the
@@ -1235,7 +1231,7 @@ mod test {
             let (tx_port, rx_port) = channel::<()>();
 
             let handle = std::thread::spawn(move || {
-                let mut buf = [0u8; 256];
+                let mut buf = [0u8; 512];
                 loop {
                     // Look for the stop signal
                     if rx_port.try_recv().is_ok() {
@@ -1251,8 +1247,6 @@ mod test {
                             }
                             break;
                         }
-                        // If chunk times out, just keep iterating until total timeout
-                        Err(ref e) if e.kind() == ErrorKind::TimedOut => (),
                         Err(_) => break,
                     }
                 }
@@ -1357,9 +1351,37 @@ mod test {
         let _ = stop_ch.send(());
     }
     #[test]
-    fn test_base_controller_modlist() {
+    fn test_base_controller_modlist_comma() {
         let from_api = b"/MODLIST\r\n";
         let from_mock_device = b"CADM2,CADM2,RSM,OEM2,-,EDM\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        // Send data to mock device and read the response.
+        let res = controller
+            .get_module_list()
+            .expect("Valid mock response given.");
+        assert_eq!(res.len(), 6);
+        assert_eq!(res[0].as_str(), "CADM2");
+        assert_eq!(res[1].as_str(), "CADM2");
+        assert_eq!(res[2].as_str(), "RSM");
+        assert_eq!(res[3].as_str(), "OEM2");
+        assert_eq!(res[4].as_str(), "-");
+        assert_eq!(res[5].as_str(), "EDM");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_modlist_carriage_return() {
+        let from_api = b"/MODLIST\r\n";
+        let from_mock_device = b"CADM2\rCADM2\rRSM\rOEM2\r-\rEDM\r\n";
         let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
@@ -1521,6 +1543,41 @@ mod test {
             )
             .expect("Valid mock response given.");
         assert_eq!(res, "Restarting ...");
+
+        // Make sure reader thread is cleaned up.
+        let _ = stop_ch.send(());
+    }
+    #[test]
+    fn test_base_controller_cadm_mov() {
+        let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
+        let from_mock_device = b"Actuating the stage.\r\n";
+        let virtual_ports = VirtualSerialPortPair::new();
+
+        // Build the mock device and base controller type
+        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
+            from_api,
+            from_mock_device,
+            &virtual_ports.port_1,
+            &virtual_ports.port_2,
+        );
+        controller.supported_stages = vec!["CLA2601".into()];
+        controller.op_mode = ControllerOpMode::Basedrive;
+        controller.modules[0] = Module::Cadm;
+        // Send data to mock device and read the response.
+        let res = controller
+            .move_stage_open(
+                Slot::One,
+                Direction::Positive,
+                600,
+                100,
+                0,
+                293,
+                "CLA2601",
+                1.2,
+            )
+            .expect("");
+
+        assert_eq!(res, "Actuating the stage.");
 
         // Make sure reader thread is cleaned up.
         let _ = stop_ch.send(());

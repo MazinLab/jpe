@@ -131,7 +131,7 @@ pub struct BaseController {
     baud_rate: Option<u32>,
     read_buffer: Vec<u8>,
     /// Internal representation of the installed modules
-    modules: [Option<Module>; 6],
+    modules: [Module; 6],
     supported_stages: Vec<String>,
 }
 // ======= Internal API =======
@@ -156,7 +156,7 @@ impl BaseController {
             serial_num,
             baud_rate,
             read_buffer: vec![0; READ_BUF_SIZE],
-            modules: [None; 6],
+            modules: [Module::Empty; 6],
             supported_stages: Vec::new(),
         }
     }
@@ -166,37 +166,18 @@ impl BaseController {
             ModeScope::Any => true,
             ModeScope::Only(modes) => modes.contains(&self.op_mode),
         };
-        let mod_check = match &cmd.allowed_mod {
-            ModuleScope::Any => true,
-            ModuleScope::Only(mods) => {
-                // Check which module is in the given slot and check if it's in the list of
-                // supported modules for this command.
-                // This is a bit ugly, may need to refactor for readability.
-                match slot {
-                    Some(Slot::One) if matches!(self.modules[0], Some(m) if mods.contains(&m)) => {
-                        true
-                    }
-                    Some(Slot::Two) if matches!(self.modules[1], Some(m) if mods.contains(&m)) => {
-                        true
-                    }
-                    Some(Slot::Three) if matches!(self.modules[2], Some(m) if mods.contains(&m)) => {
-                        true
-                    }
-                    Some(Slot::Four) if matches!(self.modules[3], Some(m) if mods.contains(&m)) => {
-                        true
-                    }
-                    Some(Slot::Five) if matches!(self.modules[4], Some(m) if mods.contains(&m)) => {
-                        true
-                    }
-                    Some(Slot::Six) if matches!(self.modules[5], Some(m) if mods.contains(&m)) => {
-                        true
-                    }
-                    // This case should never match (None in slot should only be paired with the Any case),
-                    // but returning true if so.
-                    None => true,
-                    _ => false,
-                }
-            }
+        let mod_check = match (&cmd.allowed_mod, slot) {
+            (ModuleScope::Any, _) => true,
+            (ModuleScope::Only(mods), Some(slot)) => match slot {
+                Slot::One => mods.contains(&self.modules[0]),
+                Slot::Two => mods.contains(&self.modules[1]),
+                Slot::Three => mods.contains(&self.modules[2]),
+                Slot::Four => mods.contains(&self.modules[3]),
+                Slot::Five => mods.contains(&self.modules[4]),
+                Slot::Six => mods.contains(&self.modules[5]),
+            },
+            // This is a non-expected path, but should return true if it is used.
+            (ModuleScope::Only(_), None) => true,
         };
         mod_check && opmode_check
     }
@@ -504,7 +485,7 @@ impl BaseController {
             .collect::<BaseResult<Vec<Module>>>()?
             .iter()
             .enumerate()
-            .for_each(|(idx, new_mod)| self.modules[idx] = Some(new_mod.clone()));
+            .for_each(|(idx, new_mod)| self.modules[idx] = new_mod.clone());
         Ok(v)
     }
     /// Returns a list of supported actuator and stage types

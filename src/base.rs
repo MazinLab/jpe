@@ -289,53 +289,37 @@ impl BaseController {
 
         // Loop to read in chunks and iteratively add to internal read buffer
         // until total timeout is reached.
-        let read_timer_start = Instant::now();
+        let timer = Instant::now();
         let mut total_bytes_read = 0usize;
 
-        loop {
+        // Canonical chunked read loop
+        while timer.elapsed() < READ_TIMEOUT {
             match reader.read(&mut chunk_buf) {
-                Ok(chunk_bytes_read) => {
+                // EOF reached
+                Ok(0) => break,
+                Ok(n_read) => {
+                    eprintln!("n_read: {}", n_read);
                     if let Some(buf_slice) =
-                        read_buf.get_mut(total_bytes_read..total_bytes_read + chunk_bytes_read)
+                        read_buf.get_mut(total_bytes_read..total_bytes_read + n_read)
                     {
-                        // Happy path, haven't exceeded read buffer capacity
-                        buf_slice.copy_from_slice(&chunk_buf[..chunk_bytes_read]);
-                        total_bytes_read += chunk_bytes_read;
+                        buf_slice.copy_from_slice(&chunk_buf[..n_read]);
+                        total_bytes_read += n_read;
                     } else {
-                        // Read buffer overrun case, read from chunk buf until
-                        // input buf is full and break early.
-                        if let Some(bytes_left) =
-                            (total_bytes_read + chunk_bytes_read).checked_sub(read_buf.len())
-                        {
-                            // Know the exact number of bytes to read, can use unsafe accesses
-                            read_buf[total_bytes_read..total_bytes_read + bytes_left]
-                                .copy_from_slice(&chunk_buf[..bytes_left]);
-                            total_bytes_read += bytes_left
-                        } else {
-                            return Err(Error::General(
-                                "Logic error in read buf overrun case.
-                                 Got negative difference between buf len and total bytes read."
-                                    .to_string(),
-                            ));
-                        }
-                        break;
+                        return Err(Error::BufOverflow {
+                            max_len: read_buf.len(),
+                            idx: total_bytes_read + n_read,
+                        });
                     }
                 }
-                // If chunk times out, just keep iterating until total timeout with
-                // brief pause.
-                Err(ref e)
-                    if e.kind() == ErrorKind::TimedOut
-                        || e.kind() == ErrorKind::Interrupted
-                        || e.kind() == ErrorKind::WouldBlock =>
-                {
-                    std::thread::sleep(Duration::from_millis(1));
+                // Chunk read blocked, continue to next chunk read
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => continue,
+                // In case the low-level handler does not send EOF appropriately
+                Err(ref e) if e.kind() == ErrorKind::TimedOut => continue,
+                Err(e) => {
+                    return Err(Error::Io(e));
                 }
-                Err(e) => return Err(Error::Io(e)),
             }
-            // Break out cases
-            if read_timer_start.elapsed() > READ_TIMEOUT
-                || read_buf.ends_with(TERMINATOR.as_bytes())
-            {
+            if read_buf[..total_bytes_read].ends_with(TERMINATOR.as_bytes()) {
                 break;
             }
         }
@@ -1096,9 +1080,7 @@ impl BaseControllerBuilder<Serial> {
             self.serial_num,
             self.baud_rate,
         );
-        let _ = ret
-            .get_module_list()
-            .map_err(|e| Error::General(format!("Unable to initialize module list: {}", e)))?;
+        let _ = ret.get_module_list();
         Ok(ret)
     }
     /// Walks available serial ports and tries to find the device based on the
@@ -1152,9 +1134,8 @@ impl BaseControllerBuilder<Network> {
             self.serial_num,
             self.baud_rate,
         );
-        let _ = ret
-            .get_module_list()
-            .map_err(|e| Error::General(format!("Unable to initialize module list: {}", e)))?;
+        // Attempt to fill module list. If unable, fallback to default of Empty
+        let _ = ret.get_module_list();
         Ok(ret)
     }
 }

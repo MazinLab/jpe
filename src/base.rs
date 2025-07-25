@@ -298,7 +298,6 @@ impl BaseController {
                 // EOF reached
                 Ok(0) => break,
                 Ok(n_read) => {
-                    eprintln!("n_read: {}", n_read);
                     if let Some(buf_slice) =
                         read_buf.get_mut(total_bytes_read..total_bytes_read + n_read)
                     {

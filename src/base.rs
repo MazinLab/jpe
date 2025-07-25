@@ -152,6 +152,7 @@ impl BaseController {
         serial_num: Option<String>,
         baud_rate: Option<u32>,
     ) -> Self {
+        // Initialize modules vec with installed modules.
         Self {
             conn_mode,
             op_mode: ControllerOpMode::Basedrive,
@@ -1073,7 +1074,7 @@ impl BaseControllerBuilder<Serial> {
         };
 
         // Try to bind to a serial port handle and return newly built instance
-        Ok(BaseController::new(
+        let mut ret = BaseController::new(
             self.conn_mode,
             self.ip_addr,
             self.com_port,
@@ -1092,7 +1093,11 @@ impl BaseControllerBuilder<Serial> {
             None,
             self.serial_num,
             self.baud_rate,
-        ))
+        );
+        let _ = ret
+            .get_module_list()
+            .map_err(|e| Error::General(format!("Unable to initialize module list: {}", e)))?;
+        Ok(ret)
     }
     /// Walks available serial ports and tries to find the device based on the
     /// given serial number.
@@ -1136,7 +1141,7 @@ impl BaseControllerBuilder<Network> {
         let tcp_con = TcpStream::connect(format!("{}:{}", ip_addr.as_str(), TCP_PORT))?;
         tcp_con.set_nonblocking(true)?;
 
-        Ok(BaseController::new(
+        let mut ret = BaseController::new(
             self.conn_mode,
             Some(ip_addr),
             self.com_port,
@@ -1144,7 +1149,11 @@ impl BaseControllerBuilder<Network> {
             Some(tcp_con),
             self.serial_num,
             self.baud_rate,
-        ))
+        );
+        let _ = ret
+            .get_module_list()
+            .map_err(|e| Error::General(format!("Unable to initialize module list: {}", e)))?;
+        Ok(ret)
     }
 }
 /// Used to register all types that are to be accessible

@@ -24,7 +24,7 @@ const READ_BUF_SIZE: usize = 4096;
 const READ_CHUNK_SIZE: usize = 64;
 const READ_CHUNK_TIMEOUT: Duration = Duration::from_millis(20);
 // Total time to read from the serial input queue.
-const READ_TIMEOUT: Duration = Duration::from_millis(200);
+const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const DEVICE_PID: u16 = 0000;
 const TCP_PORT: u16 = 2000;
 const TERMINATOR: &'static str = "\r\n";

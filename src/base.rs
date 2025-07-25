@@ -22,7 +22,6 @@ const STOPBITS: StopBits = StopBits::One;
 const READ_BUF_SIZE: usize = 4096;
 // Used with serial readers to set the chunk size for reading from the serial buffer
 const READ_CHUNK_SIZE: usize = 64;
-const READ_CHUNK_TIMEOUT: Duration = Duration::from_millis(20);
 // Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const DEVICE_PID: u16 = 0000;
@@ -42,7 +41,7 @@ pub enum Error {
     InvalidParams(String),
     #[error("{0}")]
     InvalidResponse(String),
-    #[error("")]
+    #[error("expected: {}, found: {}", expected, found)]
     WrongConnMode { expected: ConnMode, found: ConnMode },
     #[error("{0}")]
     General(String),
@@ -75,13 +74,13 @@ pub(crate) enum Response {
     CommaDelimited(Vec<String>),
 }
 
-/// Higher level enum for supported modules
+/// Higher level enum for supported modules for a given command.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ModuleScope {
     Any,
     Only(Vec<Module>),
 }
-/// Higher level enum for supported operation modes
+/// Higher level enum for supported operation modes for a given command.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum ModeScope {
     Any,

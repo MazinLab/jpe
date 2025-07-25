@@ -658,6 +658,7 @@ impl BaseController {
             ModeScope::Only(vec![ControllerOpMode::Basedrive]),
             &format!("SDC {} {}", slot, level),
         );
+        self.op_mode = ControllerOpMode::Basedrive;
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
@@ -697,14 +698,14 @@ impl BaseController {
         // Create the command and send to controller
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Cadm]),
-            ModeScope::Only(vec![ControllerOpMode::Basedrive]),
+            ModeScope::Only(vec![ControllerOpMode::Flexdrive]),
             &format!(
                 "EXT {} {} {} {} {} {} {}",
                 slot, direction, step_freq, r_step_size, temp, stage, drive_factor
             ),
         );
-        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         self.op_mode = ControllerOpMode::Flexdrive;
+        let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))
     }
     /// Get the position of a Resistive Linear Sensor (RLS) connected to a specific channel of the RSM
@@ -917,7 +918,6 @@ impl BaseController {
         if !self.check_stage(stage_3)? {
             return Err(Error::DeviceError(format!("Stage {} unsupported", stage_3)));
         }
-
         let cmd = Command::new(
             ModuleScope::Any,
             ModeScope::Any,
@@ -933,6 +933,8 @@ impl BaseController {
                 temp
             ),
         );
+
+        self.op_mode = ControllerOpMode::Servodrive;
         let mut v = self.handle_command(&cmd, Some(1), None)?;
         Ok(v.remove(0))
     }

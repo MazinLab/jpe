@@ -11,7 +11,7 @@ extension-module = ["pyo3/extension-module"]
 default = ["extension-module"]
 
 [package.metadata.maturin]
-name = "jpe_python"
+name = "jpe_python_ffi"
 
 [dependencies.pyo3]
 version = "0.25.0"

@@ -12,6 +12,7 @@ use thiserror::Error;
 pub mod base;
 pub mod builder;
 pub use builder::BaseContextBuilder;
+pub use config::{Direction, IpAddrMode, ModuleChannel, SerialInterface, SetpointPosMode, Slot};
 pub mod config;
 mod python_ffi;
 

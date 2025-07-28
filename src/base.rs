@@ -71,7 +71,7 @@ impl Display for Command {
 // Not supporting movement between threads at this time in Python. This is due to
 // SerialPort not being Sync.
 #[pyclass(unsendable)]
-pub(crate) struct BaseContext {
+pub struct BaseContext {
     /// Mode used to connect to the controller
     conn_mode: ConnMode,
     op_mode: ControllerOpMode,

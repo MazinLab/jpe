@@ -13,9 +13,9 @@ const DEFAULT_BAUD: u32 = 115_200;
 pub(crate) const TCP_PORT: u16 = 2000;
 
 // Type-state Builder states for the BaseContextBuilder
-pub(crate) struct Init;
-pub(crate) struct Serial;
-pub(crate) struct Network;
+pub struct Init;
+pub struct Serial;
+pub struct Network;
 
 /// Type-State Builder for the Controller type based on connection mode.
 pub struct BaseContextBuilder<T> {

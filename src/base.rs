@@ -394,6 +394,18 @@ impl BaseContext {
 // that are not directly compatible with Python.
 #[pymethods]
 impl BaseContext {
+    pub fn ip(&self) -> Option<&Ipv4Addr> {
+        self.ip_addr.as_ref().map(|sock| Some(sock.ip()))?
+    }
+    pub fn tcp_port(&self) -> Option<u16> {
+        self.ip_addr.as_ref().map(|sock| Some(sock.port()))?
+    }
+    pub fn com_port(&self) -> Option<&String> {
+        self.com_port.as_ref()
+    }
+    pub fn baud(&self) -> Option<u32> {
+        self.baud_rate
+    }
     /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {

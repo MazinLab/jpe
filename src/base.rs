@@ -730,7 +730,7 @@ impl BaseContext {
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
             ModeScope::Only(vec![ControllerOpMode::Basedrive]),
-            &format!("MIS {} {}", slot, ch),
+            &format!("MAS {} {}", slot, ch),
         );
         let mut v = self.handle_command(&cmd, Some(1), Some(slot))?;
         Ok(v.remove(0))

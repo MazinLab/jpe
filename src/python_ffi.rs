@@ -12,8 +12,8 @@ use crate::{
     },
 };
 use pyo3::exceptions::{
-    PyAttributeError, PyConnectionError, PyException, PyIOError, PyOverflowError, PyRuntimeError,
-    PyUnicodeError, PyValueError,
+    PyAttributeError, PyException, PyIOError, PyOverflowError, PyRuntimeError, PyUnicodeError,
+    PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyType;
@@ -24,7 +24,6 @@ use pyo3::types::PyType;
 impl From<Error> for PyErr {
     fn from(e: Error) -> Self {
         match e {
-            Error::Serial(e) => PyConnectionError::new_err(e.to_string()),
             Error::Io(e) => PyIOError::new_err(e.to_string()),
             Error::DeviceNotFound => PyException::new_err("Device not found"),
             Error::InvalidParams(s) => PyValueError::new_err(s),

@@ -6,7 +6,6 @@ use std::{
 };
 
 use pyo3::prelude::*;
-use serialport;
 use thiserror::Error;
 
 pub mod base;
@@ -19,8 +18,6 @@ mod python_ffi;
 /// Errors for the base controller api
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error(transparent)]
-    Serial(#[from] serialport::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Device not found.")]

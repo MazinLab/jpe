@@ -1,7 +1,7 @@
 // Defines types and functionality related to the base controller
 use crate::{BaseResult, Error, config::*};
 use pyo3::prelude::*;
-use serialport::SerialPort;
+use serial2::SerialPort;
 use std::net::SocketAddrV4;
 use std::{
     fmt::Display,
@@ -68,9 +68,7 @@ impl Display for Command {
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
-// Not supporting movement between threads at this time in Python. This is due to
-// SerialPort not being Sync.
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct BaseContext {
     /// Mode used to connect to the controller
     conn_mode: ConnMode,
@@ -83,7 +81,7 @@ pub struct BaseContext {
     /// Name of the serial port (if in serial mode)
     com_port: Option<String>,
     /// Serial connection handle (if using serial)
-    serial_conn: Option<Box<dyn SerialPort>>,
+    serial_conn: Option<SerialPort>,
     baud_rate: Option<u32>,
     read_buffer: Vec<u8>,
     /// Internal representation of the installed modules
@@ -96,7 +94,7 @@ impl BaseContext {
         conn_mode: ConnMode,
         ip_addr: Option<SocketAddrV4>,
         com_port: Option<String>,
-        serial_conn: Option<Box<dyn SerialPort>>,
+        serial_conn: Option<SerialPort>,
         net_conn: Option<TcpStream>,
         baud_rate: Option<u32>,
     ) -> Self {
@@ -214,7 +212,7 @@ impl BaseContext {
                 })?;
                 let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
                 // Clear input stream and return bytes read
-                reader.clear(serialport::ClearBuffer::Input)?;
+                reader.discard_input_buffer()?;
                 Ok(bytes_read)
             }
             ConnMode::Network => {
@@ -301,7 +299,7 @@ impl BaseContext {
         match self.conn_mode {
             ConnMode::Serial => {
                 if let Some(ref mut handle) = self.serial_conn {
-                    handle.clear(serialport::ClearBuffer::Output)?;
+                    handle.discard_output_buffer()?;
                     handle.write_all(cmd.payload.as_bytes())?;
                 } else {
                     return Err(Error::Other("Serial handle not found.".to_string()));

@@ -2,15 +2,17 @@
 network transport. */
 
 use crate::{BaseResult, base::BaseContext, config::ConnMode};
-use serialport::{DataBits, FlowControl, Parity, StopBits};
-use std::{marker::PhantomData, net::SocketAddrV4, net::TcpStream, str::FromStr};
+use serial2::SerialPort;
+use std::{
+    marker::PhantomData,
+    net::{SocketAddrV4, TcpStream},
+    str::FromStr,
+    time::Duration,
+};
 
-const PARITY: Parity = Parity::None;
-const DATABITS: DataBits = DataBits::Eight;
-const FLOWCONTROL: FlowControl = FlowControl::None;
-const STOPBITS: StopBits = StopBits::One;
 const DEFAULT_BAUD: u32 = 115_200;
 pub(crate) const TCP_PORT: u16 = 2000;
+const DEFAULT_CONN_TIMEOUT: Duration = Duration::from_secs(5);
 
 // Type-state Builder states for the BaseContextBuilder
 pub struct Init;
@@ -66,18 +68,13 @@ impl BaseContextBuilder<Serial> {
     /// Builds the controller type and tries to connect over serial.
     pub fn build(self) -> BaseResult<BaseContext> {
         // Try to bind to a serial port handle and return newly built instance
-        let io = serialport::new(
+        let io = SerialPort::open(
             self.com_port
                 .as_ref()
                 .expect("COM port required to get to serial build method."),
             self.baud_rate
                 .expect("Baud rate required to get to serial build method."),
-        )
-        .data_bits(DATABITS)
-        .parity(PARITY)
-        .flow_control(FLOWCONTROL)
-        .stop_bits(STOPBITS)
-        .open()?;
+        )?;
 
         let mut ret = BaseContext::new(
             self.conn_mode,
@@ -93,13 +90,12 @@ impl BaseContextBuilder<Serial> {
 }
 impl BaseContextBuilder<Network> {
     pub fn build(self) -> BaseResult<BaseContext> {
-        // Try to connect to TCP socket and return newly built instance
-        let tcp_con = TcpStream::connect(
-            self.ip_addr
-                .as_ref()
-                .expect("Some required to get to this method."),
+        // Try to connect to TCP socket and return newly built instance. TcpStream
+        // automatically set in non-blocking mode with `connect_timeout()`
+        let tcp_con = TcpStream::connect_timeout(
+            &self.ip_addr.expect("Must be Some to get here.").into(),
+            DEFAULT_CONN_TIMEOUT,
         )?;
-        tcp_con.set_nonblocking(true)?;
 
         let mut ret = BaseContext::new(
             self.conn_mode,

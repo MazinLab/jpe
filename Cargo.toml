@@ -18,6 +18,7 @@ version = "0.25.0"
 
 [dependencies]
 derive_more = { version = "2.0.1", features = ["display"] }
+serial2 = "0.2.29"
 serialport = "4.7.2"
 thiserror = "2.0.12"
 

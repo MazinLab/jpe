@@ -1,5 +1,5 @@
 // Defines types and functionality related to the base controller
-use crate::{BaseResult, Error, config::*};
+use crate::{BaseResult, Error, builder::TCP_PORT, config::*};
 use pyo3::prelude::*;
 use serialport::SerialPort;
 use std::net::SocketAddrV4;
@@ -384,6 +384,7 @@ impl BaseContext {
             ),
         };
         let mut v = self.handle_command(&cmd, Some(1), None)?;
+        self.ip_addr.as_mut().map(|sock| sock.set_ip(ip_addr));
         Ok(v.remove(0))
     }
 }

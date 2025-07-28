@@ -10,7 +10,7 @@ const DATABITS: DataBits = DataBits::Eight;
 const FLOWCONTROL: FlowControl = FlowControl::None;
 const STOPBITS: StopBits = StopBits::One;
 const DEFAULT_BAUD: u32 = 115_200;
-const TCP_PORT: u16 = 2000;
+pub(crate) const TCP_PORT: u16 = 2000;
 
 // Type-state Builder states for the BaseContextBuilder
 pub(crate) struct Init;

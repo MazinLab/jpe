@@ -491,6 +491,7 @@ impl BaseContext {
                 ),
             };
             let mut v = self.handle_command(&cmd, Some(1), None)?;
+            self.baud_rate.as_mut().map(|b| *b = baud);
             Ok(v.remove(0))
         } else {
             Err(Error::Bound(format!(

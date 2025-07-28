@@ -1,5 +1,5 @@
 // Defines types and functionality related to the base controller
-use crate::{BaseResult, Error, builder::TCP_PORT, config::*};
+use crate::{BaseResult, Error, config::*};
 use pyo3::prelude::*;
 use serialport::SerialPort;
 use std::net::SocketAddrV4;
@@ -11,9 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 const READ_BUF_SIZE: usize = 4096;
-// Used with serial readers to set the chunk size for reading from the serial buffer
+// Used with readers to set the chunk size for reading from the input buffer
 const READ_CHUNK_SIZE: usize = 64;
-// Total time to read from the serial input queue.
+// Max duration to read bytes from the input buffer.
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const TERMINATOR: &'static str = "\r\n";
 
@@ -115,7 +115,8 @@ impl BaseContext {
             supported_stages: Vec::new(),
         }
     }
-    /// Checks whether a command is valid given the current state of the hardware
+    /// Checks whether a command is valid given the current operation mode of the controller
+    /// and given slot.
     fn check_command(&self, cmd: &Command, slot: Option<Slot>) -> BaseResult<()> {
         if !match &cmd.allowed_mode {
             ModeScope::Any => true,
@@ -319,7 +320,7 @@ impl BaseContext {
         self.frame_response(bytes_read)
     }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
-    /// for the use of direct indexing into the resulting return value as a result.
+    /// for the use of safe direct indexing into the resulting return value deeper in the call stack.
     fn handle_command(
         &mut self,
         cmd: &Command,
@@ -333,7 +334,6 @@ impl BaseContext {
         match resp {
             Response::Error(s) => Err(Error::DeviceError(s)),
             Response::CrDelimited(v) | Response::CommaDelimited(v) => {
-                // None in expected return vals implies it can be variable, return as-is.
                 if let Some(n_vals) = n_resp_vals {
                     if v.len() != n_vals {
                         return Err(Error::InvalidResponse(format!(
@@ -344,6 +344,7 @@ impl BaseContext {
                     } else {
                         Ok(v)
                     }
+                // None implies length can be variable, return as-is.
                 } else {
                     return Ok(v);
                 }
@@ -963,10 +964,11 @@ pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()
     Ok(())
 }
 // ========== Tests ==========
-// NOTE: These are integration tests, but PyO3 currently has a bug that (at least in 0.25.0) that
-// does not allow for using integration tests as a separate crate (recommened). The workarounds
+// NOTE: These are integration tests, but PyO3 currently has a bug (at least in 0.25.0) that
+// does not allow for using integration tests as a separate crate (recommended). The workarounds
 // listed in the issue and in the FAQ do not work for MacOS (aarch64-apple-darwin).
 #[cfg(test)]
+#[cfg(unix)]
 mod test {
     use super::*;
     use crate::builder::BaseContextBuilder;

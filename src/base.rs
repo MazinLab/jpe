@@ -1,19 +1,19 @@
 // Defines types and functionality related to the base controller
 use crate::config::*;
+use crate::{BaseResult, Error};
 use pyo3::prelude::*;
 use serialport::{
     DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
 };
+use std::net::SocketAddrV4;
 use std::{
     fmt::Display,
-    io::{self, ErrorKind, Read, Write},
+    io::{ErrorKind, Read, Write},
     marker::PhantomData,
-    net::{AddrParseError, Ipv4Addr, TcpStream},
-    num::{ParseFloatError, ParseIntError},
-    str::{FromStr, Utf8Error},
+    net::{Ipv4Addr, TcpStream},
+    str::FromStr,
     time::{Duration, Instant},
 };
-use thiserror::Error;
 
 const PARITY: Parity = Parity::None;
 const DATABITS: DataBits = DataBits::Eight;
@@ -24,44 +24,10 @@ const READ_BUF_SIZE: usize = 4096;
 const READ_CHUNK_SIZE: usize = 64;
 // Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
+const DEFAULT_BAUD: u32 = 115_200;
 const DEVICE_PID: u16 = 0000;
 const TCP_PORT: u16 = 2000;
 const TERMINATOR: &'static str = "\r\n";
-
-/// Errors for the base controller api
-#[derive(Error, Debug)]
-pub enum Error {
-    #[error("{0}")]
-    Serial(#[from] serialport::Error),
-    #[error("{0}")]
-    Io(#[from] io::Error),
-    #[error("Device not found.")]
-    DeviceNotFound,
-    #[error("{0}")]
-    InvalidParams(String),
-    #[error("{0}")]
-    InvalidResponse(String),
-    #[error("expected: {}, found: {}", expected, found)]
-    WrongConnMode { expected: ConnMode, found: ConnMode },
-    #[error("{0}")]
-    General(String),
-    #[error("max_len: {}, idx: {}", max_len, idx)]
-    BufOverflow { max_len: usize, idx: usize },
-    #[error("{0}")]
-    Bound(String),
-    #[error("{0}")]
-    Utf8(#[from] Utf8Error),
-    #[error("{0}")]
-    DeviceError(String),
-    #[error("{0}")]
-    ParseIntError(#[from] ParseIntError),
-    #[error("{0}")]
-    ParseFloatError(#[from] ParseFloatError),
-    #[error("{0}")]
-    AddrParseError(#[from] AddrParseError),
-}
-
-pub type BaseResult<T> = std::result::Result<T, Error>;
 
 /// The response type expected for a given Command
 #[derive(Debug, Clone, PartialEq)]
@@ -112,28 +78,28 @@ impl Display for Command {
     }
 }
 // Type-state Builder states for the BaseControllerBuilder
-pub struct Init;
-pub struct Serial;
-pub struct Network;
+pub(crate) struct Init;
+pub(crate) struct Serial;
+pub(crate) struct Network;
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
-#[pyclass(unsendable)] // Not supporting movement between threads at this time in Python.
-pub struct BaseController {
+// Not supporting movement between threads at this time in Python. This is due to
+// SerialPort not being Sync.
+#[pyclass(unsendable)]
+pub(crate) struct BaseContext {
     /// Mode used to connect to the controller
     conn_mode: ConnMode,
     op_mode: ControllerOpMode,
-    /// Firmware version of all modules
+    /// Firmware version of controller
     fw_vers: String,
-    ip_addr: Option<String>,
+    ip_addr: Option<SocketAddrV4>,
     /// Network connection handle (if using network)
     net_conn: Option<TcpStream>,
     /// Name of the serial port (if in serial mode)
     com_port: Option<String>,
     /// Serial connection handle (if using serial)
     serial_conn: Option<Box<dyn SerialPort>>,
-    /// Device serial number
-    serial_num: Option<String>,
     baud_rate: Option<u32>,
     read_buffer: Vec<u8>,
     /// Internal representation of the installed modules
@@ -141,14 +107,13 @@ pub struct BaseController {
     supported_stages: Vec<String>,
 }
 // ======= Internal API =======
-impl BaseController {
+impl BaseContext {
     fn new(
         conn_mode: ConnMode,
-        ip_addr: Option<String>,
+        ip_addr: Option<SocketAddrV4>,
         com_port: Option<String>,
         serial_conn: Option<Box<dyn SerialPort>>,
         net_conn: Option<TcpStream>,
-        serial_num: Option<String>,
         baud_rate: Option<u32>,
     ) -> Self {
         // Initialize modules vec with installed modules.
@@ -160,7 +125,6 @@ impl BaseController {
             com_port,
             serial_conn,
             net_conn,
-            serial_num,
             baud_rate,
             read_buffer: vec![0; READ_BUF_SIZE],
             modules: [Module::Empty; 6],
@@ -355,14 +319,14 @@ impl BaseController {
                     handle.clear(serialport::ClearBuffer::Output)?;
                     handle.write_all(cmd.payload.as_bytes())?;
                 } else {
-                    return Err(Error::General("Serial handle not found.".to_string()));
+                    return Err(Error::Other("Serial handle not found.".to_string()));
                 }
             }
             ConnMode::Network => {
                 if let Some(ref mut handle) = self.net_conn {
                     handle.write_all(cmd.payload.as_bytes())?;
                 } else {
-                    return Err(Error::General("Network handle not found.".to_string()));
+                    return Err(Error::Other("Network handle not found.".to_string()));
                 }
             }
         }
@@ -407,7 +371,7 @@ impl BaseController {
 // ======= External API =======
 // Only methods that are exposed publically in Rust (not Python compatible without extension)
 
-impl BaseController {
+impl BaseContext {
     /// Sets the IP configuration for the LAN interface
     pub fn set_ip_config(
         &mut self,
@@ -445,7 +409,7 @@ impl BaseController {
 // along with PRIVATE methods (Rust) that extended externally accessible Rust methods
 // that are not directly compatible with Python.
 #[pymethods]
-impl BaseController {
+impl BaseContext {
     /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {
@@ -995,126 +959,80 @@ impl BaseController {
 }
 
 /// Type-State Builder for the Controller type based on connection mode.
-pub struct BaseControllerBuilder<T> {
+pub struct BaseContextBuilder<T> {
     conn_mode: ConnMode,
-    ip_addr: Option<String>,
+    ip_addr: Option<SocketAddrV4>,
     com_port: Option<String>,
-    serial_num: Option<String>,
     baud_rate: Option<u32>,
     _marker: PhantomData<T>,
 }
-impl BaseControllerBuilder<Init> {
+impl BaseContextBuilder<Init> {
     /// Starts the type-state builder pattern
-    pub fn new() -> BaseControllerBuilder<Init> {
+    pub fn new() -> BaseContextBuilder<Init> {
         Self {
             com_port: None,
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            serial_num: None,
             baud_rate: None,
             _marker: PhantomData,
         }
     }
     /// Continues in the path to build the controller using serial (USB or RS-422).
-    pub fn with_serial(
-        self,
-        com_port: Option<&str>,
-        serial_num: Option<&str>,
-        baud_rate: u32,
-    ) -> BaseControllerBuilder<Serial> {
-        BaseControllerBuilder {
+    pub fn with_serial(self, com_port: &str) -> BaseContextBuilder<Serial> {
+        BaseContextBuilder {
             conn_mode: ConnMode::Serial,
             ip_addr: None,
-            com_port: com_port.map(|s| s.into()),
-            serial_num: serial_num.map(|s| s.into()),
-            baud_rate: Some(baud_rate),
+            com_port: Some(com_port.into()),
+            baud_rate: Some(DEFAULT_BAUD),
             _marker: PhantomData,
         }
     }
     /// Continies in the path to build the controller using IP.
-    pub fn with_network(self, ip_addr: &str) -> BaseControllerBuilder<Network> {
-        BaseControllerBuilder {
+    pub fn with_network(self, ip_addr: &str) -> BaseContextBuilder<Network> {
+        BaseContextBuilder {
             conn_mode: ConnMode::Network,
             ip_addr: Some(ip_addr.to_string()),
             com_port: None,
-            serial_num: None,
             baud_rate: None,
             _marker: PhantomData,
         }
     }
 }
-impl BaseControllerBuilder<Serial> {
+impl BaseContextBuilder<Serial> {
+    pub fn baud(mut self, baud: u32) -> Self {
+        self.baud_rate = Some(baud);
+        self
+    }
     /// Builds the controller type and tries to connect over serial.
-    pub fn build(self) -> BaseResult<BaseController> {
-        // Try and find the serial port that the device is connected
-        let port = match (self.com_port.as_ref(), self.serial_num.as_ref()) {
-            (Some(c), _) => c.clone(),
-            (None, Some(s)) => Self::walk_com_ports(Some(s)).ok_or(Error::DeviceNotFound)?,
-            _ => {
-                return Err(Error::InvalidParams(
-                    "Need serial port or serial number to connect to device".to_string(),
-                ));
-            }
-        };
-
+    pub fn build(self) -> BaseResult<BaseContext> {
         // Try to bind to a serial port handle and return newly built instance
-        let mut ret = BaseController::new(
+        let io = serialport::new(
+            self.com_port
+                .as_ref()
+                .expect("COM port required to get to serial build method."),
+            self.baud_rate
+                .expect("Baud rate required to get to serial build method."),
+        )
+        .data_bits(DATABITS)
+        .parity(PARITY)
+        .flow_control(FLOWCONTROL)
+        .stop_bits(STOPBITS)
+        .open()?;
+
+        let mut ret = BaseContext::new(
             self.conn_mode,
             self.ip_addr,
             self.com_port,
-            Some(
-                serialport::new(
-                    port,
-                    self.baud_rate
-                        .expect("Baud rate required to get to serial build method."),
-                )
-                .data_bits(DATABITS)
-                .parity(PARITY)
-                .flow_control(FLOWCONTROL)
-                .stop_bits(STOPBITS)
-                .open()?,
-            ),
+            Some(io),
             None,
-            self.serial_num,
             self.baud_rate,
         );
         let _ = ret.get_module_list();
         Ok(ret)
     }
-    /// Walks available serial ports and tries to find the device based on the
-    /// given serial number.
-    fn walk_com_ports(serial_num: Option<&str>) -> Option<String> {
-        let ports = available_ports().ok()?;
-        let ports_with_pid: Vec<&str> = ports
-            .iter()
-            .filter_map(|port| {
-                match &port.port_type {
-                    // Check that a device exists on a USB port with the well-known PID
-                    SerialPortType::UsbPort(info) if info.pid == DEVICE_PID => {
-                        Some((port.port_name.as_str(), info.serial_number.as_ref()))
-                    }
-                    _ => None,
-                }
-            })
-            .filter_map(|(name, found_sn)| {
-                // Check if a passed serial number matches that of any remaining elements
-                // If caller does not pass a serial number, perform no filtering.
-                match (serial_num, found_sn) {
-                    (Some(passed_sn), Some(found_sn)) if passed_sn == found_sn => Some(name),
-                    (None, _) => Some(name),
-                    _ => None,
-                }
-            })
-            .collect();
-
-        // Pull out the path of the first COM port if it exists.
-        ports_with_pid
-            .get(0)
-            .and_then(|port| Some(port.to_string()))
-    }
 }
-impl BaseControllerBuilder<Network> {
-    pub fn build(self) -> BaseResult<BaseController> {
+impl BaseContextBuilder<Network> {
+    pub fn build(self) -> BaseResult<BaseContext> {
         let ip_addr = self
             .ip_addr
             .expect("IP address required to get to build method.");
@@ -1123,13 +1041,12 @@ impl BaseControllerBuilder<Network> {
         let tcp_con = TcpStream::connect(format!("{}:{}", ip_addr.as_str(), TCP_PORT))?;
         tcp_con.set_nonblocking(true)?;
 
-        let mut ret = BaseController::new(
+        let mut ret = BaseContext::new(
             self.conn_mode,
             Some(ip_addr),
             self.com_port,
             None,
             Some(tcp_con),
-            self.serial_num,
             self.baud_rate,
         );
         // Attempt to fill module list. If unable, fallback to default of Empty
@@ -1140,7 +1057,7 @@ impl BaseControllerBuilder<Network> {
 /// Used to register all types that are to be accessible
 /// via Python with the centralized PyModule
 pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<BaseController>()?;
+    m.add_class::<BaseContext>()?;
     Ok(())
 }
 // ========== Tests ==========
@@ -1152,7 +1069,6 @@ mod test {
     use super::*;
     use std::{
         fs::remove_file,
-        io::ErrorKind,
         path::Path,
         process::{Child, Command},
         sync::mpsc::{Sender, channel},
@@ -1283,9 +1199,10 @@ mod test {
         resp: &[u8],
         pty_port_a: &str,
         pty_port_b: &str,
-    ) -> (MockSerialResponder, BaseController, Sender<()>) {
-        let controller = BaseControllerBuilder::new()
-            .with_serial(Some(pty_port_a), None, BAUD)
+    ) -> (MockSerialResponder, BaseContext, Sender<()>) {
+        let controller = BaseContextBuilder::new()
+            .with_serial(pty_port_a)
+            .baud(BAUD)
             .build()
             .expect("Port is fake, should exist.");
 

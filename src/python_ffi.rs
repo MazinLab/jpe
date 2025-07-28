@@ -3,7 +3,8 @@
 use std::str::FromStr;
 
 use crate::{
-    base::{BaseController, BaseControllerBuilder, Error, Init, Network, Serial},
+    Error,
+    base::{BaseContext, BaseContextBuilder, Init, Network, Serial},
     config::{
         ConnMode, ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
         SetpointPosMode, Slot,
@@ -31,7 +32,7 @@ impl From<Error> for PyErr {
                 "Wrong connection mode. Got {}, expected {}.",
                 found, expected
             )),
-            Error::General(s) => PyException::new_err(s),
+            Error::Other(s) => PyException::new_err(s),
             Error::BufOverflow { max_len, idx } => {
                 PyOverflowError::new_err(format!("Buffer overflow, max: {}, idx: {}", max_len, idx))
             }
@@ -312,14 +313,14 @@ impl SetpointPosMode {
 
 #[pyclass(name = "BaseControllerBuilder")]
 pub struct PyBuilderInit {
-    inner: Option<BaseControllerBuilder<Init>>,
+    inner: Option<BaseContextBuilder<Init>>,
 }
 #[pymethods]
 impl PyBuilderInit {
     #[new]
     fn new() -> Self {
         Self {
-            inner: Some(BaseControllerBuilder::new()),
+            inner: Some(BaseContextBuilder::new()),
         }
     }
     fn with_serial(
@@ -356,11 +357,11 @@ impl PyBuilderInit {
 
 #[pyclass(name = "BaseWithSerial")]
 pub struct PyBaseBuilderSerial {
-    inner: Option<BaseControllerBuilder<Serial>>,
+    inner: Option<BaseContextBuilder<Serial>>,
 }
 #[pymethods]
 impl PyBaseBuilderSerial {
-    fn build(&mut self) -> PyResult<BaseController> {
+    fn build(&mut self) -> PyResult<BaseContext> {
         let inner = self
             .inner
             .take()
@@ -371,11 +372,11 @@ impl PyBaseBuilderSerial {
 
 #[pyclass(name = "BaseWithNetwork")]
 pub struct PyBaseBuilderNetwork {
-    inner: Option<BaseControllerBuilder<Network>>,
+    inner: Option<BaseContextBuilder<Network>>,
 }
 #[pymethods]
 impl PyBaseBuilderNetwork {
-    fn build(&mut self) -> PyResult<BaseController> {
+    fn build(&mut self) -> PyResult<BaseContext> {
         let inner = self
             .inner
             .take()

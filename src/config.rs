@@ -1,5 +1,5 @@
 // Contains types restricting values related to the controller API spec
-use crate::base::Error;
+use crate::Error;
 use derive_more;
 use pyo3::prelude::*;
 use std::{fmt::Display, ops::RangeInclusive, str::FromStr};

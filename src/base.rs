@@ -1,32 +1,20 @@
 // Defines types and functionality related to the base controller
-use crate::config::*;
-use crate::{BaseResult, Error};
+use crate::{BaseResult, Error, config::*};
 use pyo3::prelude::*;
-use serialport::{
-    DataBits, FlowControl, Parity, SerialPort, SerialPortType, StopBits, available_ports,
-};
+use serialport::SerialPort;
 use std::net::SocketAddrV4;
 use std::{
     fmt::Display,
     io::{ErrorKind, Read, Write},
-    marker::PhantomData,
     net::{Ipv4Addr, TcpStream},
     str::FromStr,
     time::{Duration, Instant},
 };
-
-const PARITY: Parity = Parity::None;
-const DATABITS: DataBits = DataBits::Eight;
-const FLOWCONTROL: FlowControl = FlowControl::None;
-const STOPBITS: StopBits = StopBits::One;
 const READ_BUF_SIZE: usize = 4096;
 // Used with serial readers to set the chunk size for reading from the serial buffer
 const READ_CHUNK_SIZE: usize = 64;
 // Total time to read from the serial input queue.
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
-const DEFAULT_BAUD: u32 = 115_200;
-const DEVICE_PID: u16 = 0000;
-const TCP_PORT: u16 = 2000;
 const TERMINATOR: &'static str = "\r\n";
 
 /// The response type expected for a given Command
@@ -77,10 +65,6 @@ impl Display for Command {
         write!(f, "{}", s)
     }
 }
-// Type-state Builder states for the BaseControllerBuilder
-pub(crate) struct Init;
-pub(crate) struct Serial;
-pub(crate) struct Network;
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
@@ -108,7 +92,7 @@ pub(crate) struct BaseContext {
 }
 // ======= Internal API =======
 impl BaseContext {
-    fn new(
+    pub(crate) fn new(
         conn_mode: ConnMode,
         ip_addr: Option<SocketAddrV4>,
         com_port: Option<String>,
@@ -166,15 +150,15 @@ impl BaseContext {
         }
         Ok(())
     }
-    /// Checks whether a given stage value is supported by the controller
+    /// Checks whether a given stage is supported by the controller
     fn check_stage(&mut self, stage: &str) -> BaseResult<bool> {
         if self.supported_stages.is_empty() {
             self.supported_stages = self.get_supported_stages()?;
         }
         Ok(self.supported_stages.iter().any(|s| s == stage))
     }
-    /// Parses a response in read buffer and returns the result
-    fn parse_response(&self, bytes_read: usize) -> BaseResult<Response> {
+    /// Attempts to frame and return a response in read buffer.
+    fn frame_response(&self, bytes_read: usize) -> BaseResult<Response> {
         // First, make sure index into the buffer is valid, then try to convert
         // from bytes to &str since all bytes should be ASCII.
 
@@ -332,7 +316,7 @@ impl BaseContext {
         }
         // Read raw data and try dispatching for local parsing
         let bytes_read = self.read_into_buffer()?;
-        self.parse_response(bytes_read)
+        self.frame_response(bytes_read)
     }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
     /// for the use of direct indexing into the resulting return value as a result.
@@ -958,102 +942,6 @@ impl BaseContext {
     }
 }
 
-/// Type-State Builder for the Controller type based on connection mode.
-pub struct BaseContextBuilder<T> {
-    conn_mode: ConnMode,
-    ip_addr: Option<SocketAddrV4>,
-    com_port: Option<String>,
-    baud_rate: Option<u32>,
-    _marker: PhantomData<T>,
-}
-impl BaseContextBuilder<Init> {
-    /// Starts the type-state builder pattern
-    pub fn new() -> BaseContextBuilder<Init> {
-        Self {
-            com_port: None,
-            conn_mode: ConnMode::Serial,
-            ip_addr: None,
-            baud_rate: None,
-            _marker: PhantomData,
-        }
-    }
-    /// Continues in the path to build the controller using serial (USB or RS-422).
-    pub fn with_serial(self, com_port: &str) -> BaseContextBuilder<Serial> {
-        BaseContextBuilder {
-            conn_mode: ConnMode::Serial,
-            ip_addr: None,
-            com_port: Some(com_port.into()),
-            baud_rate: Some(DEFAULT_BAUD),
-            _marker: PhantomData,
-        }
-    }
-    /// Continies in the path to build the controller using IP.
-    pub fn with_network(self, ip_addr: &str) -> BaseContextBuilder<Network> {
-        BaseContextBuilder {
-            conn_mode: ConnMode::Network,
-            ip_addr: Some(ip_addr.to_string()),
-            com_port: None,
-            baud_rate: None,
-            _marker: PhantomData,
-        }
-    }
-}
-impl BaseContextBuilder<Serial> {
-    pub fn baud(mut self, baud: u32) -> Self {
-        self.baud_rate = Some(baud);
-        self
-    }
-    /// Builds the controller type and tries to connect over serial.
-    pub fn build(self) -> BaseResult<BaseContext> {
-        // Try to bind to a serial port handle and return newly built instance
-        let io = serialport::new(
-            self.com_port
-                .as_ref()
-                .expect("COM port required to get to serial build method."),
-            self.baud_rate
-                .expect("Baud rate required to get to serial build method."),
-        )
-        .data_bits(DATABITS)
-        .parity(PARITY)
-        .flow_control(FLOWCONTROL)
-        .stop_bits(STOPBITS)
-        .open()?;
-
-        let mut ret = BaseContext::new(
-            self.conn_mode,
-            self.ip_addr,
-            self.com_port,
-            Some(io),
-            None,
-            self.baud_rate,
-        );
-        let _ = ret.get_module_list();
-        Ok(ret)
-    }
-}
-impl BaseContextBuilder<Network> {
-    pub fn build(self) -> BaseResult<BaseContext> {
-        let ip_addr = self
-            .ip_addr
-            .expect("IP address required to get to build method.");
-
-        // Try to connect to TCP socket and return newly built instance
-        let tcp_con = TcpStream::connect(format!("{}:{}", ip_addr.as_str(), TCP_PORT))?;
-        tcp_con.set_nonblocking(true)?;
-
-        let mut ret = BaseContext::new(
-            self.conn_mode,
-            Some(ip_addr),
-            self.com_port,
-            None,
-            Some(tcp_con),
-            self.baud_rate,
-        );
-        // Attempt to fill module list. If unable, fallback to default of Empty
-        let _ = ret.get_module_list();
-        Ok(ret)
-    }
-}
 /// Used to register all types that are to be accessible
 /// via Python with the centralized PyModule
 pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1067,6 +955,7 @@ pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::builder::BaseContextBuilder;
     use std::{
         fs::remove_file,
         path::Path,

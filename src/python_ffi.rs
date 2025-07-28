@@ -4,7 +4,8 @@ use std::str::FromStr;
 
 use crate::{
     Error,
-    base::{BaseContext, BaseContextBuilder, Init, Network, Serial},
+    base::BaseContext,
+    builder::{BaseContextBuilder, Init, Network, Serial},
     config::{
         ConnMode, ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
         SetpointPosMode, Slot,
@@ -311,7 +312,7 @@ impl SetpointPosMode {
 // need to wrap the current generic builder in individual
 // types that map to a class for each state.
 
-#[pyclass(name = "BaseControllerBuilder")]
+#[pyclass(name = "BaseContextBuilder")]
 pub struct PyBuilderInit {
     inner: Option<BaseContextBuilder<Init>>,
 }
@@ -323,12 +324,7 @@ impl PyBuilderInit {
             inner: Some(BaseContextBuilder::new()),
         }
     }
-    fn with_serial(
-        &mut self,
-        com_port: Option<&str>,
-        serial_num: Option<&str>,
-        baud: u32,
-    ) -> PyResult<PyBaseBuilderSerial> {
+    fn with_serial(&mut self, com_port: &str) -> PyResult<PyBaseBuilderSerial> {
         // Python does not support moving self without putting something
         // back.
         let inner = self
@@ -337,7 +333,7 @@ impl PyBuilderInit {
             .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
 
         Ok(PyBaseBuilderSerial {
-            inner: Some(inner.with_serial(com_port, serial_num, baud)),
+            inner: Some(inner.with_serial(com_port)),
         })
     }
 
@@ -350,17 +346,29 @@ impl PyBuilderInit {
             .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
 
         Ok(PyBaseBuilderNetwork {
-            inner: Some(inner.with_network(ip_addr)),
+            inner: Some(inner.with_network(ip_addr)?),
         })
     }
 }
 
-#[pyclass(name = "BaseWithSerial")]
+#[pyclass(name = "SerialContext")]
 pub struct PyBaseBuilderSerial {
     inner: Option<BaseContextBuilder<Serial>>,
 }
 #[pymethods]
 impl PyBaseBuilderSerial {
+    fn baud(&mut self, baud: u32) -> PyResult<PyBaseBuilderSerial> {
+        // Python does not support moving self without putting something
+        // back.
+        let inner = self
+            .inner
+            .take()
+            .ok_or(PyRuntimeError::new_err("Inner already consumed"))?;
+
+        Ok(PyBaseBuilderSerial {
+            inner: Some(inner.baud(baud)),
+        })
+    }
     fn build(&mut self) -> PyResult<BaseContext> {
         let inner = self
             .inner
@@ -370,7 +378,7 @@ impl PyBaseBuilderSerial {
     }
 }
 
-#[pyclass(name = "BaseWithNetwork")]
+#[pyclass(name = "NetworkContext")]
 pub struct PyBaseBuilderNetwork {
     inner: Option<BaseContextBuilder<Network>>,
 }

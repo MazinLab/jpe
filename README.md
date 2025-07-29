@@ -1,7 +1,8 @@
 
-# Module `jpe`
+# `jpe`
 
-Remote control of the JPE CPSC1 controller and associated modules.
+Library enabling remote control of the JPE CPSC1 controller and associated modules over network and serial
+transport.
 
 The `jpe` crate provides a Rust and Python implementation, via `PyO3`,
 for controlling and administering the CPSC1 controller and the following

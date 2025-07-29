@@ -24,25 +24,21 @@ for adding support for other modules!
 This example opens a connection to the controller using serial transport
 and queries for the supported cryo stage SKUs.
 
-```
-# fn example() -> std::io::Result<()> {
+```rust
 use jpe::BaseContextBuilder;
 
 // On Windows, use something like "COM1" or "COM15".
 let mut ctx = BaseContextBuilder::new().with_serial("/dev/cu.usbserial-D30IYJT2").build()?;
 let supported_stages = ctx.get_supported_stages()?;
-# }
 ```
 # Example
 This example opens a connection to the controller using network transport and
 enables scan mode (E.g. for driving a piezo scanner) on the CADM2 module in slot one
 of the controller cabinet.
 
-```
-# fn example() -> std::io::Result<()> {
+```rust
 use jpe::{BaseContextBuilder, Slot};
 
 let mut ctx = BaseContextBuilder::new().with_network("169.254.10.10").build()?;
 let _ = ctx.enable_scan_mode(Slot::One, 512)?;
-# }
 ```

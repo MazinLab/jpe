@@ -21,7 +21,7 @@
 //! use jpe::BaseContextBuilder;
 //!
 //! // On Windows, use something like "COM1" or "COM15".
-//! let mut ctx = BaseContextBuilder::new().with_serial("/dev/ttyUSB0").build()?;
+//! let mut ctx = BaseContextBuilder::new().with_serial("/dev/cu.usbserial-D30IYJT2").build()?;
 //! let supported_stages = ctx.get_supported_stages()?;
 //! # }
 //! ```

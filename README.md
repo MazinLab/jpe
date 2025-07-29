@@ -1,8 +1,3 @@
-# Crate Documentation
-
-**Version:** 0.1.0
-
-**Format Version:** 39
 
 # Module `jpe`
 

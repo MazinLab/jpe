@@ -1,7 +1,7 @@
 // Defines types and functionality related to the base controller
 use crate::{BaseResult, Error, config::*};
 use pyo3::prelude::*;
-use serialport::SerialPort;
+use serial2::SerialPort;
 use std::net::SocketAddrV4;
 use std::{
     fmt::Display,
@@ -68,9 +68,7 @@ impl Display for Command {
 
 /// Abstract, central representation of the Controller
 #[derive(Debug)]
-// Not supporting movement between threads at this time in Python. This is due to
-// SerialPort not being Sync.
-#[pyclass(unsendable)]
+#[pyclass]
 pub struct BaseContext {
     /// Mode used to connect to the controller
     conn_mode: ConnMode,
@@ -83,7 +81,7 @@ pub struct BaseContext {
     /// Name of the serial port (if in serial mode)
     com_port: Option<String>,
     /// Serial connection handle (if using serial)
-    serial_conn: Option<Box<dyn SerialPort>>,
+    serial_conn: Option<SerialPort>,
     baud_rate: Option<u32>,
     read_buffer: Vec<u8>,
     /// Internal representation of the installed modules
@@ -96,7 +94,7 @@ impl BaseContext {
         conn_mode: ConnMode,
         ip_addr: Option<SocketAddrV4>,
         com_port: Option<String>,
-        serial_conn: Option<Box<dyn SerialPort>>,
+        serial_conn: Option<SerialPort>,
         net_conn: Option<TcpStream>,
         baud_rate: Option<u32>,
     ) -> Self {
@@ -214,7 +212,7 @@ impl BaseContext {
                 })?;
                 let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
                 // Clear input stream and return bytes read
-                reader.clear(serialport::ClearBuffer::Input)?;
+                reader.discard_input_buffer()?;
                 Ok(bytes_read)
             }
             ConnMode::Network => {
@@ -301,7 +299,7 @@ impl BaseContext {
         match self.conn_mode {
             ConnMode::Serial => {
                 if let Some(ref mut handle) = self.serial_conn {
-                    handle.clear(serialport::ClearBuffer::Output)?;
+                    handle.discard_output_buffer()?;
                     handle.write_all(cmd.payload.as_bytes())?;
                 } else {
                     return Err(Error::Other("Serial handle not found.".to_string()));
@@ -968,80 +966,14 @@ pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()
 // does not allow for using integration tests as a separate crate (recommended). The workarounds
 // listed in the issue and in the FAQ do not work for MacOS (aarch64-apple-darwin).
 #[cfg(test)]
-#[cfg(unix)]
+#[cfg(target_os = "linux")]
 mod test {
     use super::*;
-    use crate::builder::BaseContextBuilder;
+    use serial2::SerialPort;
     use std::{
-        fs::remove_file,
-        path::Path,
-        process::{Child, Command},
         sync::mpsc::{Sender, channel},
-        thread::{JoinHandle, sleep},
-        time::Duration,
+        thread::JoinHandle,
     };
-    use uuid::Uuid;
-
-    const PORT1_ALIAS_PREFIX: &'static str = "/tmp/ttyV0";
-    const PORT2_ALIAS_PREFIX: &'static str = "/tmp/ttyV1";
-    const SETUP_WAIT_TIME: Duration = Duration::from_millis(200);
-
-    /// Baud is requried to be 0 with PTY ports on MacOS with serialport!
-    const BAUD: u32 = 0;
-
-    /// Used in tests to simulate connecting to the device over serial.
-    /// Uses `socat` under the hood to create a linked virtual port pair.
-    /// The aliases usually should be created in /tmp
-    struct VirtualSerialPortPair {
-        proc: Child,
-        /// Port alias to the virtual tty port 1
-        port_1: String,
-        /// Port alias to the virtual tty port 2
-        port_2: String,
-    }
-    impl VirtualSerialPortPair {
-        fn new() -> Self {
-            // Build aliases specific to this port
-            let id = Uuid::new_v4();
-            let port_1 = format!("{}_{}", PORT1_ALIAS_PREFIX, id);
-            let port_2 = format!("{}_{}", PORT2_ALIAS_PREFIX, id);
-
-            // Cleanup old virtual ports if they happen to exist
-            _ = remove_file(&port_1);
-            _ = remove_file(&port_2);
-
-            // Call socat to build port pair in new child process
-            let socat_process = Command::new("socat")
-                .arg(format!("PTY,link={},raw,echo=0", &port_1))
-                .arg(format!("PTY,link={},raw,echo=0", &port_2))
-                .spawn()
-                .expect("Socat process failed to spawn.");
-
-            // Verify the ports exist after some dead time
-            sleep(SETUP_WAIT_TIME);
-            assert!(Path::new(&port_1).exists());
-            assert!(Path::new(&port_2).exists());
-
-            Self {
-                proc: socat_process,
-                port_1,
-                port_2,
-            }
-        }
-    }
-
-    impl Drop for VirtualSerialPortPair {
-        fn drop(&mut self) {
-            // Signal to kill the process then wait until it returns
-            // dead.
-            let _ = self.proc.kill();
-            let _ = self.proc.wait();
-
-            // Remove the aliases from tmp
-            _ = remove_file(&self.port_1);
-            _ = remove_file(&self.port_2);
-        }
-    }
 
     /// Mock controller used to test serial reads/writes from the API
     /// in a concurrent fashion.
@@ -1049,12 +981,7 @@ mod test {
         thread_handle: Option<JoinHandle<()>>,
     }
     impl MockSerialResponder {
-        fn new(port: &str, query: &[u8], resp: &[u8]) -> (Self, Sender<()>) {
-            let mut port = serialport::new(port, BAUD)
-                .timeout(Duration::from_millis(100))
-                .open()
-                .expect(&format!("Could not open serial port on {}", port));
-
+        fn new(port: SerialPort, query: &[u8], resp: &[u8]) -> (Self, Sender<()>) {
             let q = query.to_vec();
             let r = resp.to_vec();
             let (tx_port, rx_port) = channel::<()>();
@@ -1102,36 +1029,45 @@ mod test {
     fn setup_mock_and_base(
         query: &[u8],
         resp: &[u8],
-        pty_port_a: &str,
-        pty_port_b: &str,
-    ) -> (MockSerialResponder, BaseContext, Sender<()>) {
-        let controller = BaseContextBuilder::new()
-            .with_serial(pty_port_a)
-            .baud(BAUD)
-            .build()
-            .expect("Port is fake, should exist.");
+    ) -> BaseResult<(MockSerialResponder, BaseContext, Sender<()>)> {
+        let (pty_port_a, pty_port_b) = SerialPort::pair()?;
+
+        let controller = BaseContext {
+            conn_mode: ConnMode::Serial,
+            op_mode: ControllerOpMode::Basedrive,
+            fw_vers: "".to_string(),
+            ip_addr: None,
+            net_conn: None,
+            com_port: Some("fake".to_string()),
+            serial_conn: Some(pty_port_a),
+            baud_rate: Some(9600),
+            read_buffer: vec![0; READ_BUF_SIZE],
+            modules: [Module::Empty; 6],
+            supported_stages: Vec::new(),
+        };
 
         let (mock_device, stop_ch) = MockSerialResponder::new(pty_port_b, query, resp);
 
-        (mock_device, controller, stop_ch)
+        Ok((mock_device, controller, stop_ch))
     }
     #[test]
-    fn test_virtual_serial_port_pair() {
-        let _ = VirtualSerialPortPair::new();
+    fn test_build_mock_state() {
+        let from_api = b"/VER\r\n";
+        let from_mock_device = b"v8.0.20220221/";
+        let ret = setup_mock_and_base(from_api, from_mock_device);
+        ret.unwrap();
     }
     #[test]
     fn test_base_controller_bad_terminator() {
         let from_api = b"/VER\r\n";
         let from_mock_device = b"v8.0.20220221/";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
         // Send data to mock device and read the response.
         let res = controller.get_fw_version();
         assert!(res.is_err());
@@ -1143,15 +1079,14 @@ mod test {
     fn test_base_controller_invalid_slot() {
         let from_api = b"FIV 1\r\n";
         let from_mock_device = b"";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller.get_mod_fw_version(Slot::Three);
         assert!(res.is_err());
@@ -1163,15 +1098,14 @@ mod test {
     fn test_base_controller_invalid_mode() {
         let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
         let from_mock_device = b"";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         controller.supported_stages = vec!["CLA2601".into()];
         controller.op_mode = ControllerOpMode::Servodrive;
         controller.modules[0] = Module::Cadm;
@@ -1196,15 +1130,14 @@ mod test {
     fn test_base_controller_invalid_module() {
         let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
         let from_mock_device = b"";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         controller.supported_stages = vec!["CLA2601".into()];
         controller.op_mode = ControllerOpMode::Basedrive;
         controller.modules[0] = Module::Rsm;
@@ -1229,15 +1162,13 @@ mod test {
     fn test_base_controller_fw_version() {
         let from_api = b"/VER\r\n";
         let from_mock_device = b"v8.0.20220221\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
         // Send data to mock device and read the response.
         let _ = controller
             .get_fw_version()
@@ -1250,15 +1181,14 @@ mod test {
     fn test_base_controller_modlist_comma() {
         let from_api = b"/MODLIST\r\n";
         let from_mock_device = b"CADM2,CADM2,RSM,OEM2,-,EDM\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .get_module_list()
@@ -1278,15 +1208,14 @@ mod test {
     fn test_base_controller_modlist_carriage_return() {
         let from_api = b"/MODLIST\r\n";
         let from_mock_device = b"CADM2\rCADM2\rRSM\rOEM2\r-\rEDM\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .get_module_list()
@@ -1306,15 +1235,14 @@ mod test {
     fn test_base_controller_mod_fw_version() {
         let from_api = b"FIV 1\r\n";
         let from_mock_device = b"CADM2.7.3.20210802\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .get_mod_fw_version(Slot::One)
@@ -1328,15 +1256,14 @@ mod test {
     fn test_base_controller_fw_update() {
         let from_api = b"FU 5 Cadm2Firmware.bin\r\n";
         let from_mock_device = b"Firmware update complete.\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller.start_mod_fw_update("Cadm2Firmware.bin", Slot::Five);
         assert!(res.is_ok());
@@ -1348,15 +1275,14 @@ mod test {
     fn test_base_controller_get_baud_rate() {
         let from_api = b"/GBR RS422\r\n";
         let from_mock_device = b"9600\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .get_baud_rate(SerialInterface::Rs422)
@@ -1370,15 +1296,14 @@ mod test {
     fn test_base_controller_set_baud_rate() {
         let from_api = b"/SBR USB 9600\r\n";
         let from_mock_device = b"Restarting ...\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .set_baud_rate(SerialInterface::Usb, 9600)
@@ -1393,15 +1318,14 @@ mod test {
         let from_api = b"/IPR\r\n";
         let from_mock_device =
             b"DHCP,192.168.15.62,255.255.255.0,192.168.15.125,40:2e:71:90:e4:8a\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .get_ip_config()
@@ -1420,15 +1344,14 @@ mod test {
     fn test_base_controller_set_ip_settings() {
         let from_api = b"/IPS STATIC 192.168.1.10 255.255.255.0 192.168.1.1\r\n";
         let from_mock_device = b"Restarting ...\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .set_ip_config(
@@ -1448,15 +1371,14 @@ mod test {
     fn test_base_controller_get_stages() {
         let from_api = b"/STAGES\r\n";
         let from_mock_device = b"CLA2201,CLA2201-COE,CLA2201MK1,CLA2201MK1-COE,CLA2601\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         // Send data to mock device and read the response.
         let res = controller
             .get_supported_stages()
@@ -1475,15 +1397,14 @@ mod test {
     fn test_base_controller_cadm2_mov() {
         let from_api = b"MOV 1 1 600 100 0 293 CLA2601 1.2\r\n";
         let from_mock_device = b"";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         controller.supported_stages = vec!["CLA2601".into()];
         controller.op_mode = ControllerOpMode::Basedrive;
         controller.modules[0] = Module::Cadm;
@@ -1508,15 +1429,14 @@ mod test {
     fn test_base_controller_cadm2_stop() {
         let from_api = b"STP 4\r\n";
         let from_mock_device = b"Stopping the stage.\r\n";
-        let virtual_ports = VirtualSerialPortPair::new();
 
         // Build the mock device and base controller type
-        let (mut _mock, mut controller, stop_ch) = setup_mock_and_base(
-            from_api,
-            from_mock_device,
-            &virtual_ports.port_1,
-            &virtual_ports.port_2,
-        );
+        let Ok((mut _mock, mut controller, stop_ch)) =
+            setup_mock_and_base(from_api, from_mock_device)
+        else {
+            panic!("bad test construction!")
+        };
+
         controller.supported_stages = vec!["CLA2601".into()];
         controller.op_mode = ControllerOpMode::Basedrive;
         controller.modules[3] = Module::Cadm;

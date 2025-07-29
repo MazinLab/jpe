@@ -31,7 +31,6 @@ use jpe::BaseContextBuilder;
 let mut ctx = BaseContextBuilder::new().with_serial("/dev/cu.usbserial-D30IYJT2").build()?;
 let supported_stages = ctx.get_supported_stages()?;
 ```
-# Example
 This example opens a connection to the controller using network transport and
 enables scan mode (E.g. for driving a piezo scanner) on the CADM2 module in slot one
 of the controller cabinet.

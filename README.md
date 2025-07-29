@@ -24,7 +24,7 @@ for adding support for other modules!
 This example opens a connection to the controller using serial transport
 and queries for the supported cryo stage SKUs.
 
-```no_run
+```
 # fn example() -> std::io::Result<()> {
 use jpe::BaseContextBuilder;
 
@@ -38,7 +38,7 @@ This example opens a connection to the controller using network transport and
 enables scan mode (E.g. for driving a piezo scanner) on the CADM2 module in slot one
 of the controller cabinet.
 
-```no_run
+```
 # fn example() -> std::io::Result<()> {
 use jpe::{BaseContextBuilder, Slot};
 

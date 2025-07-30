@@ -63,7 +63,7 @@ pub(crate) trait BufClear: Read + Write {
 /// Simple trait used to simplify internal API between the user facing
 /// context and the infrastructure used to communicate over the wire.
 pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
-    fn transact(&mut self, cmd: &Command) -> Result<Frame, Error>;
+    fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
 }
 
 /// Connection mode to the controller. Used internally by the controller
@@ -113,20 +113,19 @@ where
 
         match msg.chars().filter(|c| *c == '\r').count() {
             // Comma-delimited case when there is only one carriage return in the
-            // non Error path, but one or more commas.
-            1 => Ok(Frame::CommaDelimited(
+            // non Error path (previously removed), but one or more commas.
+            0 => Ok(Frame::CommaDelimited(
                 msg.split(|c| c == ',')
                     .map(|slice| slice.to_string())
                     .collect(),
             )),
             // Carriage return delimited (bug) case, greater than one carriage return in
-            // the non Error path but no commas.
-            2.. => Ok(Frame::CrDelimited(
+            // the non Error path (one previously removed) but no commas.
+            1.. => Ok(Frame::CrDelimited(
                 msg.split(|c| c == '\r')
                     .map(|slice| slice.to_string())
                     .collect(),
             )),
-            _ => Err(Error::InvalidResponse(format!("Malformed Response: {msg}"))),
         }
     }
 
@@ -142,12 +141,12 @@ where
         let mut chunk_buf = [0u8; READ_CHUNK_SIZE];
 
         // Canonical chunked read loop
-        while timer.elapsed() < READ_TIMEOUT || !self.read_buf.ends_with(TERMINATOR.as_bytes()) {
+        while timer.elapsed() < READ_TIMEOUT && !self.read_buf.ends_with(TERMINATOR.as_bytes()) {
             match self.transport.read(&mut chunk_buf) {
                 Ok(0) => break,
                 Ok(n_read) => {
                     total_b_read += n_read;
-                    if total_b_read > MAX_FRAME_SIZE || n_read > self.read_buf.remaining() {
+                    if total_b_read > MAX_FRAME_SIZE {
                         self.read_buf.clear();
                         let _ = self.transport.clear_input_buffer();
                         return Err(Error::BufOverflow {
@@ -156,7 +155,7 @@ where
                         });
                     }
 
-                    self.read_buf.put_slice(&chunk_buf);
+                    self.read_buf.put_slice(&chunk_buf[..n_read]);
                 }
                 // Chunk read blocked, continue to next chunk read
                 Err(ref e) if e.kind() == ErrorKind::WouldBlock => continue,
@@ -167,6 +166,7 @@ where
                 }
             }
         }
+
         Ok(())
     }
     // Handles the interplay between polling the device and capturing the
@@ -187,7 +187,7 @@ impl<B> Transport for Connection<B>
 where
     B: BufClear + Sync + Send + std::fmt::Debug,
 {
-    fn transact(&mut self, cmd: &Command) -> Result<Frame, Error> {
+    fn transact(&mut self, cmd: &Command) -> BaseResult<Frame> {
         self.transaction_handler(cmd)
     }
 }
@@ -195,7 +195,7 @@ where
 impl BufClear for TcpStream {
     /// Used to keep the request/response paradigm in sync by draining
     /// the recv buffer of the TcpStream
-    fn clear_input_buffer(&mut self) -> Result<(), Error> {
+    fn clear_input_buffer(&mut self) -> BaseResult<()> {
         let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
 
         // Drain any remanining data from stream.
@@ -213,16 +213,16 @@ impl BufClear for TcpStream {
         Ok(())
     }
 
-    fn clear_output_buffer(&mut self) -> Result<(), Error> {
+    fn clear_output_buffer(&mut self) -> BaseResult<()> {
         Ok(())
     }
 }
 impl BufClear for SerialPort {
-    fn clear_input_buffer(&mut self) -> Result<(), Error> {
+    fn clear_input_buffer(&mut self) -> BaseResult<()> {
         self.discard_input_buffer().map_err(|e| e.into())
     }
 
-    fn clear_output_buffer(&mut self) -> Result<(), Error> {
+    fn clear_output_buffer(&mut self) -> BaseResult<()> {
         self.discard_output_buffer().map_err(|e| e.into())
     }
 }

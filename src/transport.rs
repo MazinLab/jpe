@@ -147,8 +147,6 @@ where
                 Ok(n_read) => {
                     total_b_read += n_read;
                     if total_b_read > MAX_FRAME_SIZE {
-                        self.read_buf.clear();
-                        let _ = self.transport.clear_input_buffer();
                         return Err(Error::BufOverflow {
                             max_len: MAX_FRAME_SIZE,
                             idx: total_b_read,

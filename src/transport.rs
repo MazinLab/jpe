@@ -4,7 +4,7 @@ use crate::{
     BaseResult, Error,
     base::{ModeScope, ModuleScope},
 };
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use serial2::SerialPort;
 use std::{
     fmt::Display,

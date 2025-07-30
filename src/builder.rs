@@ -92,6 +92,7 @@ impl BaseContextBuilder<Network> {
                 .into(),
             DEFAULT_CONN_TIMEOUT,
         )?;
+        tcp_con.set_nonblocking(true)?;
         // Build connection
         let conn = Connection::new(tcp_con);
 

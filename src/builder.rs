@@ -1,7 +1,7 @@
 /* Defines the builder functionality for the BaseContext with serial and
 network transport. */
 
-use crate::{BaseResult, base::BaseContext, config::ConnMode};
+use crate::{BaseResult, base::BaseContext, transport::Connection};
 use serial2::SerialPort;
 use std::{
     marker::PhantomData,
@@ -21,7 +21,6 @@ pub struct Network;
 
 /// Type-State Builder for the Controller type based on connection mode.
 pub struct BaseContextBuilder<T> {
-    conn_mode: ConnMode,
     ip_addr: Option<SocketAddrV4>,
     com_port: Option<String>,
     baud_rate: Option<u32>,
@@ -32,7 +31,6 @@ impl BaseContextBuilder<Init> {
     pub fn new() -> BaseContextBuilder<Init> {
         Self {
             com_port: None,
-            conn_mode: ConnMode::Serial,
             ip_addr: None,
             baud_rate: None,
             _marker: PhantomData,
@@ -41,7 +39,6 @@ impl BaseContextBuilder<Init> {
     /// Continues in the path to build the controller using serial (USB or RS-422).
     pub fn with_serial(self, com_port: &str) -> BaseContextBuilder<Serial> {
         BaseContextBuilder {
-            conn_mode: ConnMode::Serial,
             ip_addr: None,
             com_port: Some(com_port.into()),
             baud_rate: Some(DEFAULT_BAUD),
@@ -52,7 +49,6 @@ impl BaseContextBuilder<Init> {
     pub fn with_network(self, v4_addr: &str) -> BaseResult<BaseContextBuilder<Network>> {
         let v4_addr = SocketAddrV4::from_str(&format!("{}:{}", v4_addr, TCP_PORT))?;
         Ok(BaseContextBuilder {
-            conn_mode: ConnMode::Network,
             ip_addr: Some(v4_addr),
             com_port: None,
             baud_rate: None,
@@ -76,14 +72,11 @@ impl BaseContextBuilder<Serial> {
                 .expect("Baud rate required to get to serial build method."),
         )?;
 
-        let mut ret = BaseContext::new(
-            self.conn_mode,
-            self.ip_addr,
-            self.com_port,
-            Some(io),
-            None,
-            self.baud_rate,
-        );
+        // Build connection
+        let conn = Connection::new(io);
+
+        // Try to init module list
+        let mut ret = BaseContext::new(Box::new(conn));
         let _ = ret.get_module_list();
         Ok(ret)
     }
@@ -93,19 +86,18 @@ impl BaseContextBuilder<Network> {
         // Try to connect to TCP socket and return newly built instance. TcpStream
         // automatically set in non-blocking mode with `connect_timeout()`
         let tcp_con = TcpStream::connect_timeout(
-            &self.ip_addr.expect("Must be Some to get here.").into(),
+            &self
+                .ip_addr
+                .expect("IP address required to get to network build method.")
+                .into(),
             DEFAULT_CONN_TIMEOUT,
         )?;
+        tcp_con.set_nonblocking(true)?;
+        // Build connection
+        let conn = Connection::new(tcp_con);
 
-        let mut ret = BaseContext::new(
-            self.conn_mode,
-            self.ip_addr,
-            self.com_port,
-            None,
-            Some(tcp_con),
-            self.baud_rate,
-        );
-        // Attempt to fill module list. If unable, fallback to default of Empty
+        // Try to init module list
+        let mut ret = BaseContext::new(Box::new(conn));
         let _ = ret.get_module_list();
         Ok(ret)
     }

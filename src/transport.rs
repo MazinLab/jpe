@@ -174,12 +174,12 @@ where
     pub(crate) fn transaction_handler(&mut self, cmd: &Command) -> BaseResult<Frame> {
         // encode and send data on wire
         self.transport.clear_output_buffer()?;
+        self.transport.clear_input_buffer()?;
         self.transport.write_all(cmd.payload.as_bytes())?;
         self.transport.flush()?;
 
         // Read raw data and try dispatching for local parsing
         self.read_chunks()?;
-        let _ = self.transport.clear_input_buffer();
         self.parse_frame()
     }
 }

@@ -153,23 +153,6 @@ pub enum ControllerOpMode {
     Servodrive,
     Flexdrive,
 }
-/// Connection mode to the controller. Used internally by the controller
-/// base API.
-#[derive(Debug, Clone, PartialEq)]
-#[pyclass]
-pub(crate) enum ConnMode {
-    Serial,
-    Network,
-}
-impl Display for ConnMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            ConnMode::Serial => "Serial",
-            ConnMode::Network => "Network",
-        };
-        write!(f, "{}", s)
-    }
-}
 
 /// Specific channel of a Module
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -268,7 +251,6 @@ pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()
     m.add_class::<IpAddrMode>()?;
     m.add_class::<Module>()?;
     m.add_class::<ControllerOpMode>()?;
-    m.add_class::<ConnMode>()?;
     m.add_class::<ModuleChannel>()?;
     m.add_class::<Direction>()?;
     m.add_class::<SetpointPosMode>()?;

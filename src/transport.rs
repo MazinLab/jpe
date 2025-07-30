@@ -66,6 +66,11 @@ trait BufClear: Read + Write {
     fn clear_input_buffer(&mut self) -> Result<(), Error>;
     fn clear_output_buffer(&mut self) -> Result<(), Error>;
 }
+/// Simple trait used to simplify internal API between the user facing
+/// context and the infrastructure used to communicate over the wire.
+pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
+    fn transact(&mut self, cmd: &Command) -> Result<Frame, Error>;
+}
 
 /// Connection mode to the controller. Used internally by the controller
 /// base API.
@@ -86,12 +91,15 @@ impl Display for ConnMode {
     }
 }
 /// Abstracts the low-level reading and writing semantics
-pub(crate) struct Transport<B: BufClear> {
+#[derive(Debug)]
+pub(crate) struct Connection<B: BufClear + Sync + Send + std::fmt::Debug> {
     read_buf: BytesMut,
-    conn_mode: ConnMode,
     transport: B,
 }
-impl<B: BufClear> Transport<B> {
+impl<B> Connection<B>
+where
+    B: BufClear + Sync + Send + std::fmt::Debug,
+{
     /// Attempts to frame bytes in the read buffer.
     fn parse_frame(&mut self) -> BaseResult<Frame> {
         let msg = std::str::from_utf8(&self.read_buf)?
@@ -170,6 +178,14 @@ impl<B: BufClear> Transport<B> {
         // Read raw data and try dispatching for local parsing
         self.read_chunks()?;
         self.parse_frame()
+    }
+}
+impl<B> Transport for Connection<B>
+where
+    B: BufClear + Sync + Send + std::fmt::Debug,
+{
+    fn transact(&mut self, cmd: &Command) -> Result<Frame, Error> {
+        self.transaction_handler(cmd)
     }
 }
 

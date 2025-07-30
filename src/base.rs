@@ -1,114 +1,31 @@
+use crate::transport::{Command, Frame, ModeScope, ModuleScope, Transport};
 // Defines types and functionality related to the base controller
 use crate::{BaseResult, Error, config::*};
 use pyo3::prelude::*;
-use serial2::SerialPort;
-use std::net::SocketAddrV4;
-use std::{
-    fmt::Display,
-    io::{ErrorKind, Read, Write},
-    net::{Ipv4Addr, TcpStream},
-    str::FromStr,
-    time::{Duration, Instant},
-};
-const READ_BUF_SIZE: usize = 4096;
-// Used with readers to set the chunk size for reading from the input buffer
-const READ_CHUNK_SIZE: usize = 64;
-// Max duration to read bytes from the input buffer.
-const READ_TIMEOUT: Duration = Duration::from_millis(500);
-const TERMINATOR: &'static str = "\r\n";
+use std::{net::Ipv4Addr, str::FromStr};
 
-/// The response type expected for a given Command
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Response {
-    /// Error responses, begins with "Error"
-    Error(String),
-    /// Carriage return delimited responses (currently a bug)
-    CrDelimited(Vec<String>),
-    /// Normal, non-Error responses delimited by commas
-    CommaDelimited(Vec<String>),
-}
-
-/// Higher level enum for supported modules for a given command.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ModuleScope {
-    Any,
-    Only(Vec<Module>),
-}
-/// Higher level enum for supported operation modes for a given command.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ModeScope {
-    Any,
-    Only(Vec<ControllerOpMode>),
-}
-/// The command type that the base controller API expects
-/// for dispatch and response routing.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Command {
-    /// Modules that support this command
-    pub(crate) allowed_mod: ModuleScope,
-    /// Controller operation modes that support this command
-    pub(crate) allowed_mode: ModeScope,
-    pub(crate) payload: String,
-}
-impl Command {
-    pub(crate) fn new(allowed_mod: ModuleScope, allowed_mode: ModeScope, payload: &str) -> Self {
-        Self {
-            allowed_mod,
-            allowed_mode,
-            payload: format!("{}{}", payload, TERMINATOR),
-        }
-    }
-}
-impl Display for Command {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = self.payload.split_whitespace().next().unwrap_or("Unknown");
-        write!(f, "{}", s)
-    }
-}
-
-/// Abstract, central representation of the Controller
+/// Abstract, central representation of the Controller.
 #[derive(Debug)]
 #[pyclass]
 pub struct BaseContext {
     /// Mode used to connect to the controller
-    conn_mode: ConnMode,
     op_mode: ControllerOpMode,
     /// Firmware version of controller
     fw_vers: String,
-    ip_addr: Option<SocketAddrV4>,
-    /// Network connection handle (if using network)
-    net_conn: Option<TcpStream>,
-    /// Name of the serial port (if in serial mode)
-    com_port: Option<String>,
+    conn: Box<dyn Transport>,
     /// Serial connection handle (if using serial)
-    serial_conn: Option<SerialPort>,
-    baud_rate: Option<u32>,
-    read_buffer: Vec<u8>,
     /// Internal representation of the installed modules
     modules: [Module; 6],
     supported_stages: Vec<String>,
 }
 // ======= Internal API =======
 impl BaseContext {
-    pub(crate) fn new(
-        conn_mode: ConnMode,
-        ip_addr: Option<SocketAddrV4>,
-        com_port: Option<String>,
-        serial_conn: Option<SerialPort>,
-        net_conn: Option<TcpStream>,
-        baud_rate: Option<u32>,
-    ) -> Self {
+    pub(crate) fn new(conn: Box<dyn Transport>) -> Self {
         // Initialize modules vec with installed modules.
         Self {
-            conn_mode,
             op_mode: ControllerOpMode::Basedrive,
             fw_vers: "".to_string(),
-            ip_addr,
-            com_port,
-            serial_conn,
-            net_conn,
-            baud_rate,
-            read_buffer: vec![0; READ_BUF_SIZE],
+            conn,
             modules: [Module::Empty; 6],
             supported_stages: Vec::new(),
         }
@@ -156,167 +73,7 @@ impl BaseContext {
         }
         Ok(self.supported_stages.iter().any(|s| s == stage))
     }
-    /// Attempts to frame and return a response in read buffer.
-    fn frame_response(&self, bytes_read: usize) -> BaseResult<Response> {
-        // First, make sure index into the buffer is valid, then try to convert
-        // from bytes to &str since all bytes should be ASCII.
 
-        let msg = std::str::from_utf8(self.read_buffer.get(..bytes_read).ok_or(
-            Error::BufOverflow {
-                max_len: self.read_buffer.len(),
-                idx: bytes_read,
-            },
-        )?)?;
-
-        // Error case returns early
-        if msg.starts_with("Error") {
-            return Ok(Response::Error(
-                msg.strip_suffix(TERMINATOR)
-                    .ok_or(Error::InvalidResponse("Bad terminator".to_string()))?
-                    .to_string(),
-            ));
-        }
-
-        // Comma-delimited case when there is only one carriage return in the
-        // non Error path. More than one, the CrDelimited (bug) case
-        match msg.chars().filter(|c| *c == '\r').count() {
-            1 => Ok(Response::CommaDelimited(
-                msg.strip_suffix(TERMINATOR)
-                    .ok_or(Error::InvalidResponse(
-                        "Bad terminator in Comma Delimited branch".to_string(),
-                    ))?
-                    .split(|c| c == ',')
-                    .map(|slice| slice.to_string())
-                    .collect(),
-            )),
-            2.. => Ok(Response::CrDelimited(
-                msg.strip_suffix(TERMINATOR)
-                    .ok_or(Error::InvalidResponse(
-                        "Bad terminator CR delimited branch".to_string(),
-                    ))?
-                    .split(|c| c == '\r')
-                    .map(|slice| slice.to_string())
-                    .collect(),
-            )),
-            _ => Err(Error::InvalidResponse(format!("Malformed Response: {msg}"))),
-        }
-    }
-    /// Higher level read function that reads from any given media into the
-    /// internal read buffer.
-    fn read_into_buffer(&mut self) -> BaseResult<usize> {
-        match self.conn_mode {
-            ConnMode::Serial => {
-                let reader = self.serial_conn.as_mut().ok_or(Error::WrongConnMode {
-                    expected: ConnMode::Serial,
-                    found: ConnMode::Network,
-                })?;
-                let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
-                // Clear input stream and return bytes read
-                reader.discard_input_buffer()?;
-                Ok(bytes_read)
-            }
-            ConnMode::Network => {
-                let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
-                    expected: ConnMode::Network,
-                    found: ConnMode::Serial,
-                })?;
-                let bytes_read = Self::read_chunks(&mut self.read_buffer, reader)?;
-                // Clear input stream  and return bytes read
-                self.clear_tcp_recv_buf()?;
-                Ok(bytes_read)
-            }
-        }
-    }
-    /// Low-level reader for all connections
-    fn read_chunks<T: Read>(read_buf: &mut [u8], reader: &mut T) -> BaseResult<usize> {
-        // Clear the read buffer and create a local chunk buffer.
-        read_buf.fill(0);
-        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
-
-        // Loop to read in chunks and iteratively add to internal read buffer
-        // until total timeout is reached.
-        let timer = Instant::now();
-        let mut total_bytes_read = 0usize;
-
-        // Canonical chunked read loop
-        while timer.elapsed() < READ_TIMEOUT {
-            match reader.read(&mut chunk_buf) {
-                // EOF reached
-                Ok(0) => break,
-                Ok(n_read) => {
-                    if let Some(buf_slice) =
-                        read_buf.get_mut(total_bytes_read..total_bytes_read + n_read)
-                    {
-                        buf_slice.copy_from_slice(&chunk_buf[..n_read]);
-                        total_bytes_read += n_read;
-                    } else {
-                        return Err(Error::BufOverflow {
-                            max_len: read_buf.len(),
-                            idx: total_bytes_read + n_read,
-                        });
-                    }
-                }
-                // Chunk read blocked, continue to next chunk read
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => continue,
-                // In case the low-level handler does not send EOF appropriately
-                Err(ref e) if e.kind() == ErrorKind::TimedOut => continue,
-                Err(e) => {
-                    return Err(Error::Io(e));
-                }
-            }
-            if read_buf[..total_bytes_read].ends_with(TERMINATOR.as_bytes()) {
-                break;
-            }
-        }
-        Ok(total_bytes_read)
-    }
-    /// Used to keep the request/response paradigm in sync by draining
-    /// the recv buffer of the TcpStream
-    fn clear_tcp_recv_buf(&mut self) -> BaseResult<()> {
-        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
-        let reader = self.net_conn.as_mut().ok_or(Error::WrongConnMode {
-            expected: ConnMode::Network,
-            found: ConnMode::Serial,
-        })?;
-        // Drain any remanining data from stream.
-        loop {
-            match reader.read(&mut chunk_buf) {
-                // Stream has been closed.
-                Ok(0) => break,
-                // Discard any data that is read
-                Ok(_) => continue,
-                // No data to read, waiting on OS to present more data.
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
-                Err(e) => return Err(Error::Io(e)),
-            }
-        }
-        Ok(())
-    }
-    // Handles the interplay between polling the device and capturing the
-    // acknowledgment that most API functions will use.
-    fn comms_handler(&mut self, cmd: &Command) -> BaseResult<Response> {
-        // encode and send data on wire
-        match self.conn_mode {
-            ConnMode::Serial => {
-                if let Some(ref mut handle) = self.serial_conn {
-                    handle.discard_output_buffer()?;
-                    handle.write_all(cmd.payload.as_bytes())?;
-                } else {
-                    return Err(Error::Other("Serial handle not found.".to_string()));
-                }
-            }
-            ConnMode::Network => {
-                if let Some(ref mut handle) = self.net_conn {
-                    handle.write_all(cmd.payload.as_bytes())?;
-                } else {
-                    return Err(Error::Other("Network handle not found.".to_string()));
-                }
-            }
-        }
-        // Read raw data and try dispatching for local parsing
-        let bytes_read = self.read_into_buffer()?;
-        self.frame_response(bytes_read)
-    }
     /// Handler to abstract the boilerplate used in most command methods. The length bounds check allows
     /// for the use of safe direct indexing into the resulting return value deeper in the call stack.
     fn handle_command(
@@ -328,10 +85,10 @@ impl BaseContext {
         // Check to verify if command is valid
         self.check_command(cmd, slot)?;
 
-        let resp = self.comms_handler(&cmd)?;
+        let resp = self.conn.transact(&cmd)?;
         match resp {
-            Response::Error(s) => Err(Error::DeviceError(s)),
-            Response::CrDelimited(v) | Response::CommaDelimited(v) => {
+            Frame::Error(s) => Err(Error::DeviceError(s)),
+            Frame::CrDelimited(v) | Frame::CommaDelimited(v) => {
                 if let Some(n_vals) = n_resp_vals {
                     if v.len() != n_vals {
                         return Err(Error::InvalidResponse(format!(
@@ -383,7 +140,6 @@ impl BaseContext {
             ),
         };
         let mut v = self.handle_command(&cmd, Some(1), None)?;
-        self.ip_addr.as_mut().map(|sock| sock.set_ip(ip_addr));
         Ok(v.remove(0))
     }
 }
@@ -394,18 +150,6 @@ impl BaseContext {
 // that are not directly compatible with Python.
 #[pymethods]
 impl BaseContext {
-    pub fn ip(&self) -> Option<&Ipv4Addr> {
-        self.ip_addr.as_ref().map(|sock| Some(sock.ip()))?
-    }
-    pub fn tcp_port(&self) -> Option<u16> {
-        self.ip_addr.as_ref().map(|sock| Some(sock.port()))?
-    }
-    pub fn com_port(&self) -> Option<&String> {
-        self.com_port.as_ref()
-    }
-    pub fn baud(&self) -> Option<u32> {
-        self.baud_rate
-    }
     /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {
@@ -490,7 +234,6 @@ impl BaseContext {
                 ),
             };
             let mut v = self.handle_command(&cmd, Some(1), None)?;
-            self.baud_rate.as_mut().map(|b| *b = baud);
             Ok(v.remove(0))
         } else {
             Err(Error::Bound(format!(

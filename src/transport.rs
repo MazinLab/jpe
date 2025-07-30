@@ -1,4 +1,5 @@
 /* Abstraction for the transport semantics */
+
 use crate::{BaseResult, Error, config::*};
 use bytes::{Buf, BufMut, BytesMut};
 use serial2::SerialPort;
@@ -62,7 +63,8 @@ impl Display for Command {
     }
 }
 
-trait BufClear: Read + Write {
+// Trait to unify underlying types
+pub(crate) trait BufClear: Read + Write {
     fn clear_input_buffer(&mut self) -> Result<(), Error>;
     fn clear_output_buffer(&mut self) -> Result<(), Error>;
 }
@@ -100,6 +102,12 @@ impl<B> Connection<B>
 where
     B: BufClear + Sync + Send + std::fmt::Debug,
 {
+    pub fn new(transport: B) -> Self {
+        Self {
+            transport,
+            read_buf: BytesMut::with_capacity(MAX_FRAME_SIZE * 2),
+        }
+    }
     /// Attempts to frame bytes in the read buffer.
     fn parse_frame(&mut self) -> BaseResult<Frame> {
         let msg = std::str::from_utf8(&self.read_buf)?
@@ -138,6 +146,7 @@ where
         let timer = Instant::now();
         let mut total_b_read = 0usize;
         self.read_buf.clear();
+
         let mut chunk_buf = [0u8; READ_CHUNK_SIZE];
 
         // Canonical chunked read loop
@@ -147,8 +156,8 @@ where
                 Ok(n_read) => {
                     total_b_read += n_read;
                     if total_b_read > MAX_FRAME_SIZE || n_read > self.read_buf.remaining() {
-                        // Reset position of internal buffer
                         self.read_buf.clear();
+                        let _ = self.transport.clear_input_buffer();
                         return Err(Error::BufOverflow {
                             max_len: MAX_FRAME_SIZE,
                             idx: total_b_read,
@@ -174,9 +183,11 @@ where
         // encode and send data on wire
         self.transport.clear_output_buffer()?;
         self.transport.write_all(cmd.payload.as_bytes())?;
+        self.transport.flush()?;
 
         // Read raw data and try dispatching for local parsing
         self.read_chunks()?;
+        let _ = self.transport.clear_input_buffer();
         self.parse_frame()
     }
 }

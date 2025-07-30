@@ -38,7 +38,6 @@
 //! let _ = ctx.enable_scan_mode(Slot::One, 512)?;
 //! # }
 //! ```
-use crate::config::*;
 use std::{
     net::AddrParseError,
     num::{ParseFloatError, ParseIntError},
@@ -47,9 +46,11 @@ use std::{
 
 use pyo3::prelude::*;
 use thiserror::Error;
+use transport::ConnMode;
 
 pub mod base;
 pub mod builder;
+pub(crate) mod transport;
 pub use builder::BaseContextBuilder;
 pub use config::{Direction, IpAddrMode, ModuleChannel, SerialInterface, SetpointPosMode, Slot};
 pub mod config;

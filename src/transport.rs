@@ -1,13 +1,17 @@
 /* Abstraction for the transport semantics */
 
-use crate::{BaseResult, Error, config::*};
+use crate::{
+    BaseResult, Error,
+    base::{ModeScope, ModuleScope},
+};
 use bytes::{Buf, BufMut, BytesMut};
 use serial2::SerialPort;
-use std::fmt::Display;
-use std::io::ErrorKind;
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::{Duration, Instant};
+use std::{
+    fmt::Display,
+    io::{ErrorKind, Read, Write},
+    net::TcpStream,
+    time::{Duration, Instant},
+};
 
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const READ_CHUNK_SIZE: usize = 64;
@@ -25,18 +29,6 @@ pub(crate) enum Frame {
     CommaDelimited(Vec<String>),
 }
 
-/// Higher level enum for supported modules for a given command.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ModuleScope {
-    Any,
-    Only(Vec<Module>),
-}
-/// Higher level enum for supported operation modes for a given command.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ModeScope {
-    Any,
-    Only(Vec<ControllerOpMode>),
-}
 /// The command type that the base controller API expects
 /// for dispatch and response routing.
 #[derive(Debug, Clone, PartialEq)]

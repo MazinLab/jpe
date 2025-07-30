@@ -1,9 +1,20 @@
-use crate::transport::{Command, Frame, ModeScope, ModuleScope, Transport};
 // Defines types and functionality related to the base controller
-use crate::{BaseResult, Error, config::*};
+use crate::{BaseResult, Error, config::*, transport::*};
 use pyo3::prelude::*;
 use std::{net::Ipv4Addr, str::FromStr};
 
+/// Higher level enum for supported modules for a given command.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ModuleScope {
+    Any,
+    Only(Vec<Module>),
+}
+/// Higher level enum for supported operation modes for a given command.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum ModeScope {
+    Any,
+    Only(Vec<ControllerOpMode>),
+}
 /// Abstract, central representation of the Controller.
 #[derive(Debug)]
 #[pyclass]
@@ -12,6 +23,8 @@ pub struct BaseContext {
     op_mode: ControllerOpMode,
     /// Firmware version of controller
     fw_vers: String,
+    /// Type-erased connection. Using dynamic dispatch due to PyO3 not
+    /// supporting generic types.
     conn: Box<dyn Transport>,
     /// Serial connection handle (if using serial)
     /// Internal representation of the installed modules

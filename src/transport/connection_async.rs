@@ -1,21 +1,23 @@
 use super::*;
 use crate::{BaseResult, Error};
 use bytes::BytesMut;
+use std::error::Error as _;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ErrorKind}, // tokio::io::Error <=> std::io::Error
     net::TcpStream,
     time::timeout,
 };
+use tokio_serial::{ClearBuffer, SerialStream};
 
-/// Abstracts the low-level reading and writing semantics
+/// Abstracts the low-level reading and writing semantics in an async context.
 #[derive(Debug)]
-pub(crate) struct ConnectionAsync<B: AsyncBufClear + Sync + Send + std::fmt::Debug + Unpin> {
+pub(crate) struct ConnectionAsync<B: AsyncBufClear + Sync + Send + std::fmt::Debug> {
     read_buf: BytesMut,
     transport: B,
 }
 impl<B> ConnectionAsync<B>
 where
-    B: AsyncBufClear + Sync + Send + std::fmt::Debug + Unpin,
+    B: AsyncBufClear + Sync + Send + std::fmt::Debug,
 {
     pub fn new(transport: B) -> Self {
         Self {
@@ -98,7 +100,7 @@ where
 }
 impl<B> AsyncTransport for ConnectionAsync<B>
 where
-    B: AsyncBufClear + Sync + Send + std::fmt::Debug + Unpin,
+    B: AsyncBufClear + Sync + Send + std::fmt::Debug,
 {
     async fn transact(&mut self, cmd: &Command) -> BaseResult<Frame> {
         self.transaction_handler(cmd).await
@@ -107,10 +109,49 @@ where
 
 impl AsyncBufClear for TcpStream {
     async fn clear_input_buffer(&mut self) -> Result<(), Error> {
-        todo!()
+        let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
+
+        // Drain any remanining data from stream.
+        loop {
+            match self.read(&mut chunk_buf).await {
+                // Stream has been closed or has zero bytes to read.
+                Ok(0) => break,
+                // Discard any data that is read
+                Ok(_) => continue,
+                // No data to read, waiting on OS to present more data.
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => break,
+                Err(e) => return Err(Error::Io(e)),
+            }
+        }
+        Ok(())
     }
 
     async fn clear_output_buffer(&mut self) -> Result<(), Error> {
-        todo!()
+        Ok(())
+    }
+}
+impl AsyncBufClear for SerialStream {
+    async fn clear_input_buffer(&mut self) -> Result<(), Error> {
+        self.clear(ClearBuffer::Input).map_err(|e| {
+            // Try downcasting to IO error to flatten this crate's
+            // Error surface.
+            if let Some(Some(io_err)) = e.source().map(|e| e.downcast_ref::<std::io::Error>()) {
+                return Error::Io(std::io::Error::from(io_err.kind()));
+            } else {
+                return Error::Serial(e);
+            }
+        })
+    }
+
+    async fn clear_output_buffer(&mut self) -> Result<(), Error> {
+        self.clear(ClearBuffer::Output).map_err(|e| {
+            // Try downcasting to IO error to flatten this crate's
+            // Error surface.
+            if let Some(Some(io_err)) = e.source().map(|e| e.downcast_ref::<std::io::Error>()) {
+                return Error::Io(std::io::Error::from(io_err.kind()));
+            } else {
+                return Error::Serial(e);
+            }
+        })
     }
 }

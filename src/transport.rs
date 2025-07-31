@@ -10,6 +10,7 @@ use crate::{
 use std::{
     fmt::Display,
     io::{Read, Write},
+    pin::Pin,
     time::Duration,
 };
 
@@ -64,8 +65,8 @@ pub(crate) trait BufClear: Read + Write {
 }
 // Async version of `BufClear` trait.
 pub(crate) trait AsyncBufClear: AsyncRead + AsyncWrite + Unpin {
-    async fn clear_input_buffer(&mut self) -> Result<(), Error>;
-    async fn clear_output_buffer(&mut self) -> Result<(), Error>;
+    fn clear_input_buffer(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
+    fn clear_output_buffer(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
 }
 
 /// Simple trait used to simplify internal API between the user facing
@@ -73,7 +74,11 @@ pub(crate) trait AsyncBufClear: AsyncRead + AsyncWrite + Unpin {
 pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
     fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
 }
-/// Async version of `Transport` trait.
+/// Async version of `Transport` trait. Complexity due to async methods not being
+/// allowed in trait objects (Futures aren't Sized).
 pub(crate) trait AsyncTransport: std::fmt::Debug + Send + Sync + Unpin {
-    async fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
+    fn transact<'a>(
+        &'a mut self,
+        cmd: &'a Command,
+    ) -> Pin<Box<dyn Future<Output = BaseResult<Frame>> + 'a>>;
 }

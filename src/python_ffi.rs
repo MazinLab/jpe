@@ -12,8 +12,7 @@ use crate::{
     },
 };
 use pyo3::exceptions::{
-    PyAttributeError, PyException, PyIOError, PyOverflowError, PyRuntimeError, PyUnicodeError,
-    PyValueError,
+    PyException, PyIOError, PyOverflowError, PyRuntimeError, PyUnicodeError, PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyType;

@@ -6,20 +6,20 @@ use std::{net::Ipv4Addr, str::FromStr};
 
 /// Abstract, central representation of the Controller.
 #[derive(Debug)]
-pub struct BaseContextAsync<T: AsyncTransport> {
+pub struct BaseContextAsync {
     /// Mode used to connect to the controller
     op_mode: ControllerOpMode,
     /// Firmware version of controller
     fw_vers: String,
     // Underlying transport
-    conn: T,
+    conn: Box<dyn AsyncTransport>,
     /// Internal representation of the installed modules
     modules: [Module; 6],
     supported_stages: Vec<String>,
 }
 // ======= Internal API =======
-impl<T: AsyncTransport> BaseContextAsync<T> {
-    pub(crate) fn new(conn: T) -> Self {
+impl BaseContextAsync {
+    pub(crate) fn new(conn: Box<dyn AsyncTransport>) -> Self {
         // Initialize modules vec with installed modules.
         Self {
             op_mode: ControllerOpMode::Basedrive,
@@ -107,7 +107,7 @@ impl<T: AsyncTransport> BaseContextAsync<T> {
     }
 }
 
-impl<T: AsyncTransport> BaseContextAsync<T> {
+impl BaseContextAsync {
     /// Returns the firmware version of the controller and updates internal value.
     pub async fn get_fw_version(&mut self) -> BaseResult<String> {
         if !self.fw_vers.is_empty() {

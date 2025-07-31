@@ -84,25 +84,27 @@ where
         }
         Ok(())
     }
-    // Handles the interplay between polling the device and capturing the
-    // acknowledgment that most API functions will use.
-    pub(crate) async fn transaction_handler(&mut self, cmd: &Command) -> BaseResult<Frame> {
-        self.transport.clear_input_buffer().await?;
-        self.transport.clear_output_buffer().await?;
-        self.transport.write_all(cmd.payload.as_bytes()).await?;
-        self.transport.flush().await?;
-
-        // Read raw data and try dispatching for local parsing
-        self.read_chunks().await?;
-        self.parse_frame()
-    }
 }
 impl<B> AsyncTransport for ConnectionAsync<B>
 where
     B: AsyncBufClear + Sync + Send + std::fmt::Debug,
 {
-    async fn transact(&mut self, cmd: &Command) -> BaseResult<Frame> {
-        self.transaction_handler(cmd).await
+    // Handles the interplay between polling the device and capturing the
+    // acknowledgment that most API functions will use.
+    fn transact<'a>(
+        &'a mut self,
+        cmd: &'a Command,
+    ) -> Pin<Box<dyn Future<Output = BaseResult<Frame>> + 'a>> {
+        Box::pin(async move {
+            self.transport.clear_input_buffer().await?;
+            self.transport.clear_output_buffer().await?;
+            self.transport.write_all(cmd.payload.as_bytes()).await?;
+            self.transport.flush().await?;
+
+            // Read raw data and try dispatching for local parsing
+            self.read_chunks().await?;
+            self.parse_frame()
+        })
     }
 }
 

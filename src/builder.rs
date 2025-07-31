@@ -20,9 +20,6 @@ const DEFAULT_BAUD: u32 = 115_200;
 pub(crate) const TCP_PORT: u16 = 2000;
 const DEFAULT_CONN_TIMEOUT: Duration = Duration::from_secs(5);
 
-pub(crate) type AsyncSerialConn = ConnectionAsync<SerialPortAsync>;
-pub(crate) type AsyncNetConn = ConnectionAsync<TcpStreamAsync>;
-
 // Type-state Builder states for the BaseContextBuilder
 pub struct Init;
 pub struct Serial;
@@ -118,7 +115,7 @@ impl BaseContextBuilder<SerialAsync> {
         self
     }
     /// Builds the controller type and tries to connect over serial in an async runtime.
-    pub fn build(self) -> BaseResult<BaseContextAsync<AsyncSerialConn>> {
+    pub fn build(self) -> BaseResult<BaseContextAsync> {
         // Try to bind to a serial port handle and return newly built instance
         let io = SerialPortAsync::open(
             self.com_port
@@ -132,15 +129,14 @@ impl BaseContextBuilder<SerialAsync> {
         let conn = ConnectionAsync::new(io);
 
         // Try to init module list
-        let mut ret = BaseContextAsync::new(conn);
+        let mut ret = BaseContextAsync::new(Box::new(conn));
         let _ = ret.get_module_list();
         Ok(ret)
     }
 }
 impl BaseContextBuilder<Network> {
     pub fn build(self) -> BaseResult<BaseContext> {
-        // Try to connect to TCP socket and return newly built instance. TcpStream
-        // automatically set in non-blocking mode with `connect_timeout()`
+        // Try to connect to TCP socket and return newly built instance.
         let tcp_con = TcpStream::connect_timeout(
             &self
                 .ip_addr
@@ -159,9 +155,8 @@ impl BaseContextBuilder<Network> {
     }
 }
 impl BaseContextBuilder<NetworkAsync> {
-    pub fn build(self) -> BaseResult<BaseContextAsync<AsyncNetConn>> {
-        // Try to connect to TCP socket and return newly built instance. TcpStream
-        // automatically set in non-blocking mode with `connect_timeout()`
+    pub fn build(self) -> BaseResult<BaseContextAsync> {
+        // Try to connect to TCP socket and return newly built instance.
         let tcp_con = TcpStream::connect_timeout(
             &self
                 .ip_addr
@@ -171,14 +166,14 @@ impl BaseContextBuilder<NetworkAsync> {
         )?;
         tcp_con.set_nonblocking(true)?;
 
-        // Try to consume the connection and turn into async
+        // Try to consume the sync connection and turn into async
         let tcp_con = TcpStreamAsync::from_std(tcp_con)?;
 
         // Build connection
         let conn = ConnectionAsync::new(tcp_con);
 
         // Try to init module list
-        let mut ret = BaseContextAsync::new(conn);
+        let mut ret = BaseContextAsync::new(Box::new(conn));
         let _ = ret.get_module_list();
         Ok(ret)
     }

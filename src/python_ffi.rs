@@ -28,10 +28,6 @@ impl From<Error> for PyErr {
             Error::DeviceNotFound => PyException::new_err("Device not found"),
             Error::InvalidParams(s) => PyValueError::new_err(s),
             Error::InvalidResponse(s) => PyValueError::new_err(s),
-            Error::WrongConnMode { expected, found } => PyAttributeError::new_err(format!(
-                "Wrong connection mode. Got {}, expected {}.",
-                found, expected
-            )),
             Error::Other(s) => PyException::new_err(s),
             Error::BufOverflow { max_len, idx } => {
                 PyOverflowError::new_err(format!("Buffer overflow, max: {}, idx: {}", max_len, idx))

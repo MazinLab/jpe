@@ -77,22 +77,3 @@ pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
 pub(crate) trait AsyncTransport: std::fmt::Debug + Send + Sync + Unpin {
     async fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
 }
-
-/// Connection mode to the controller. Used internally by the controller
-/// base API.
-#[derive(Debug)]
-pub(crate) enum ConnMode {
-    Rs422,
-    Usb,
-    Network,
-}
-impl Display for ConnMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            ConnMode::Usb => "Usb",
-            ConnMode::Network => "Network",
-            ConnMode::Rs422 => "RS422",
-        };
-        write!(f, "{}", s)
-    }
-}

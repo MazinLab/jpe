@@ -46,7 +46,6 @@ use std::{
 
 use pyo3::prelude::*;
 use thiserror::Error;
-use transport::ConnMode;
 
 pub mod base;
 pub mod builder;
@@ -67,8 +66,6 @@ pub enum Error {
     InvalidParams(String),
     #[error("{0}")]
     InvalidResponse(String),
-    #[error("expected: {}, found: {}", expected, found)]
-    WrongConnMode { expected: ConnMode, found: ConnMode },
     #[error("{0}")]
     Other(String),
     #[error("max_len: {}, idx: {}", max_len, idx)]

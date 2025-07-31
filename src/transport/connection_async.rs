@@ -20,7 +20,7 @@ where
     pub fn new(transport: B) -> Self {
         Self {
             transport,
-            read_buf: BytesMut::with_capacity(MAX_FRAME_SIZE * 2),
+            read_buf: BytesMut::with_capacity(MAX_FRAME_SIZE),
         }
     }
     /// Attempts to frame bytes in the read buffer.
@@ -86,7 +86,14 @@ where
     // Handles the interplay between polling the device and capturing the
     // acknowledgment that most API functions will use.
     pub(crate) async fn transaction_handler(&mut self, cmd: &Command) -> BaseResult<Frame> {
-        todo!()
+        self.transport.clear_input_buffer().await?;
+        self.transport.clear_output_buffer().await?;
+        self.transport.write_all(cmd.payload.as_bytes()).await?;
+        self.transport.flush().await?;
+
+        // Read raw data and try dispatching for local parsing
+        self.read_chunks().await?;
+        self.parse_frame()
     }
 }
 impl<B> AsyncTransport for ConnectionAsync<B>

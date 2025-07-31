@@ -14,6 +14,7 @@ use std::{
 };
 
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_serial::SerialPort;
 
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const READ_CHUNK_SIZE: usize = 64;
@@ -63,17 +64,18 @@ pub(crate) trait BufClear: Read + Write {
     fn clear_output_buffer(&mut self) -> Result<(), Error>;
 }
 // Async version of `BufClear` trait.
-pub(crate) trait AsyncBufClear: AsyncRead + AsyncWrite {
+pub(crate) trait AsyncBufClear: AsyncRead + AsyncWrite + Unpin {
     async fn clear_input_buffer(&mut self) -> Result<(), Error>;
     async fn clear_output_buffer(&mut self) -> Result<(), Error>;
 }
+
 /// Simple trait used to simplify internal API between the user facing
 /// context and the infrastructure used to communicate over the wire.
 pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
     fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
 }
 /// Async version of `Transport` trait.
-pub(crate) trait AsyncTransport: std::fmt::Debug + Send + Sync {
+pub(crate) trait AsyncTransport: std::fmt::Debug + Send + Sync + Unpin {
     async fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
 }
 

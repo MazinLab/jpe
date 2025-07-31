@@ -14,7 +14,6 @@ use std::{
 };
 
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_serial::SerialPort;
 
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const READ_CHUNK_SIZE: usize = 64;

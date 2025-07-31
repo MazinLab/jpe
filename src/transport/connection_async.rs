@@ -1,14 +1,13 @@
 use super::*;
 use crate::{BaseResult, Error};
 use bytes::BytesMut;
-use std::error::Error as _;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt, ErrorKind}, // tokio::io::Error <=> std::io::Error
     net::TcpStream,
     time::timeout,
 };
-use tokio_serial::{ClearBuffer, SerialStream};
 
+use serial2_tokio::SerialPort;
 /// Abstracts the low-level reading and writing semantics in an async context.
 #[derive(Debug)]
 pub(crate) struct ConnectionAsync<B: AsyncBufClear + Sync + Send + std::fmt::Debug> {
@@ -130,28 +129,12 @@ impl AsyncBufClear for TcpStream {
         Ok(())
     }
 }
-impl AsyncBufClear for SerialStream {
-    async fn clear_input_buffer(&mut self) -> Result<(), Error> {
-        self.clear(ClearBuffer::Input).map_err(|e| {
-            // Try downcasting to IO error to flatten this crate's
-            // Error surface.
-            if let Some(Some(io_err)) = e.source().map(|e| e.downcast_ref::<std::io::Error>()) {
-                return Error::Io(std::io::Error::from(io_err.kind()));
-            } else {
-                return Error::Serial(e);
-            }
-        })
+impl AsyncBufClear for SerialPort {
+    async fn clear_input_buffer(&mut self) -> BaseResult<()> {
+        self.discard_input_buffer().map_err(|e| e.into())
     }
 
-    async fn clear_output_buffer(&mut self) -> Result<(), Error> {
-        self.clear(ClearBuffer::Output).map_err(|e| {
-            // Try downcasting to IO error to flatten this crate's
-            // Error surface.
-            if let Some(Some(io_err)) = e.source().map(|e| e.downcast_ref::<std::io::Error>()) {
-                return Error::Io(std::io::Error::from(io_err.kind()));
-            } else {
-                return Error::Serial(e);
-            }
-        })
+    async fn clear_output_buffer(&mut self) -> BaseResult<()> {
+        self.discard_output_buffer().map_err(|e| e.into())
     }
 }

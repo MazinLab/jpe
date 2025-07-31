@@ -60,8 +60,6 @@ mod python_ffi;
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
-    Serial(#[from] tokio_serial::Error),
-    #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error("Device not found.")]
     DeviceNotFound,

@@ -24,7 +24,6 @@ use pyo3::types::PyType;
 impl From<Error> for PyErr {
     fn from(e: Error) -> Self {
         match e {
-            Error::Serial(_) => unreachable!("Variant only applicable in async"),
             Error::Io(e) => PyIOError::new_err(e.to_string()),
             Error::DeviceNotFound => PyException::new_err("Device not found"),
             Error::InvalidParams(s) => PyValueError::new_err(s),

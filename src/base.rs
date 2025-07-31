@@ -2,8 +2,10 @@
 use crate::config::*;
 
 pub mod context;
+pub mod context_async;
 pub use context::BaseContext;
 pub(crate) use context::register_pyo3;
+pub use context_async::BaseContextAsync;
 
 /// Higher level enum for supported modules for a given command.
 #[derive(Debug, Clone, PartialEq)]

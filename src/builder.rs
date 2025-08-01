@@ -115,7 +115,7 @@ impl BaseContextBuilder<SerialAsync> {
         self
     }
     /// Builds the controller type and tries to connect over serial in an async runtime.
-    pub fn build(self) -> BaseResult<BaseContextAsync> {
+    pub async fn build(self) -> BaseResult<BaseContextAsync> {
         // Try to bind to a serial port handle and return newly built instance
         let io = SerialPortAsync::open(
             self.com_port
@@ -130,7 +130,7 @@ impl BaseContextBuilder<SerialAsync> {
 
         // Try to init module list
         let mut ret = BaseContextAsync::new(Box::new(conn));
-        let _ = ret.get_module_list();
+        let _ = ret.get_module_list().await; 
         Ok(ret)
     }
 }
@@ -155,7 +155,7 @@ impl BaseContextBuilder<Network> {
     }
 }
 impl BaseContextBuilder<NetworkAsync> {
-    pub fn build(self) -> BaseResult<BaseContextAsync> {
+    pub async fn build(self) -> BaseResult<BaseContextAsync> {
         // Try to connect to TCP socket and return newly built instance.
         let tcp_con = TcpStream::connect_timeout(
             &self
@@ -174,7 +174,8 @@ impl BaseContextBuilder<NetworkAsync> {
 
         // Try to init module list
         let mut ret = BaseContextAsync::new(Box::new(conn));
-        let _ = ret.get_module_list();
+        let _ = ret.get_module_list().await;
+        
         Ok(ret)
     }
 }

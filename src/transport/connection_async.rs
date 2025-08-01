@@ -79,7 +79,7 @@ where
                     }
                 }
                 // Read timer elapsed
-                Err(_) => break,
+                Err(_) => break
             }
         }
         Ok(())
@@ -111,10 +111,9 @@ where
 impl AsyncBufClear for TcpStream {
     async fn clear_input_buffer(&mut self) -> Result<(), Error> {
         let mut chunk_buf: [u8; READ_CHUNK_SIZE] = [0; READ_CHUNK_SIZE];
-
         // Drain any remanining data from stream.
         loop {
-            match self.read(&mut chunk_buf).await {
+            match self.try_read(&mut chunk_buf) {
                 // Stream has been closed or has zero bytes to read.
                 Ok(0) => break,
                 // Discard any data that is read

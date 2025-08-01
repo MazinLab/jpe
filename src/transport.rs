@@ -75,7 +75,7 @@ pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
     fn transact(&mut self, cmd: &Command) -> BaseResult<Frame>;
 }
 /// Async version of `Transport` trait. Complexity due to async methods not being
-/// allowed in trait objects (Futures aren't Sized).
+/// dyn compatible (Futures aren't Sized).
 pub(crate) trait AsyncTransport: std::fmt::Debug + Send + Sync + Unpin {
     fn transact<'a>(
         &'a mut self,

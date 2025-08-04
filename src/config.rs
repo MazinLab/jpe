@@ -3,7 +3,7 @@ use crate::Error;
 use derive_more;
 use std::{fmt::Display, ops::RangeInclusive, str::FromStr};
 
-#[cfg(feature = "sync")]
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 pub(crate) const BAUD_BOUNDS: RangeInclusive<u32> = 9600..=1_000_000;
@@ -16,7 +16,7 @@ pub(crate) const SCANNER_LEVEL_BOUNDS: RangeInclusive<u16> = 0..=1023;
 
 /// The module slot within the controller
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum Slot {
     One,
     Two,
@@ -71,7 +71,7 @@ impl From<Slot> for u8 {
 
 /// Supported serial modes for the controller
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum SerialInterface {
     Rs422,
     Usb,
@@ -92,7 +92,7 @@ impl FromStr for SerialInterface {
 
 /// Supported address assignment mode for the controller.
 #[derive(Debug, Clone, PartialEq, Eq, derive_more::Display)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum IpAddrMode {
     Dhcp,
     Static,
@@ -113,7 +113,7 @@ impl FromStr for IpAddrMode {
 
 /// Reperesents the different types of Module supported by the controller
 #[derive(Debug, Clone, Copy, PartialEq, derive_more::Display)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 pub(crate) enum Module {
     Cadm,
     Rsm,
@@ -157,7 +157,7 @@ pub enum ControllerOpMode {
 
 /// Specific channel of a Module
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum ModuleChannel {
     One,
     Two,
@@ -199,7 +199,7 @@ impl From<ModuleChannel> for u8 {
 /// Direction of movement for a given stage. 1 for positive movement and 0 for
 /// negative movement.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 pub enum Direction {
     Positive,
     Negative,
@@ -226,7 +226,7 @@ impl Display for Direction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "sync", pyclass)]
+#[cfg_attr(feature = "python", pyclass)]
 /// Represents the stage positioning modes available when using servodrive
 /// when setting a setpoint.
 pub enum SetpointPosMode {
@@ -243,7 +243,7 @@ impl Display for SetpointPosMode {
         write!(f, "{}", s)
     }
 }
-#[cfg(feature = "sync")]
+#[cfg(feature = "python")]
 /// Used to register all types that are to be accessible
 /// via Python with the centralized PyModule
 pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -7,13 +7,12 @@ use crate::{
     base::BaseContext,
     builder::{BaseContextBuilder, Init, Network, Serial},
     config::{
-        ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
+        Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
         SetpointPosMode, Slot,
     },
 };
 use pyo3::exceptions::{
-    PyAttributeError, PyException, PyIOError, PyOverflowError, PyRuntimeError, PyUnicodeError,
-    PyValueError,
+    PyException, PyIOError, PyOverflowError, PyRuntimeError, PyUnicodeError, PyValueError,
 };
 use pyo3::prelude::*;
 use pyo3::types::PyType;
@@ -28,10 +27,6 @@ impl From<Error> for PyErr {
             Error::DeviceNotFound => PyException::new_err("Device not found"),
             Error::InvalidParams(s) => PyValueError::new_err(s),
             Error::InvalidResponse(s) => PyValueError::new_err(s),
-            Error::WrongConnMode { expected, found } => PyAttributeError::new_err(format!(
-                "Wrong connection mode. Got {}, expected {}.",
-                found, expected
-            )),
             Error::Other(s) => PyException::new_err(s),
             Error::BufOverflow { max_len, idx } => {
                 PyOverflowError::new_err(format!("Buffer overflow, max: {}, idx: {}", max_len, idx))
@@ -178,30 +173,6 @@ impl Module {
     #[classmethod]
     fn edm(_cls: &Bound<'_, PyType>) -> Self {
         Self::Edm
-    }
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{self}"))
-    }
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self))
-    }
-}
-#[pymethods]
-impl ControllerOpMode {
-    /// Returns instance (variant) Basedrive
-    #[classmethod]
-    fn base(_cls: &Bound<'_, PyType>) -> Self {
-        Self::Basedrive
-    }
-    /// Returns instance (variant) Servodrive
-    #[classmethod]
-    fn servo(_cls: &Bound<'_, PyType>) -> Self {
-        Self::Servodrive
-    }
-    /// Returns instance (variant) Flexdrive
-    #[classmethod]
-    fn flex(_cls: &Bound<'_, PyType>) -> Self {
-        Self::Flexdrive
     }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))

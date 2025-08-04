@@ -1,10 +1,16 @@
 // Defines types and functionality related to the base controller
 use crate::config::*;
 
+#[cfg(feature = "sync")]
 pub mod context;
-pub mod context_async;
+#[cfg(feature = "sync")]
 pub use context::BaseContext;
+#[cfg(feature = "sync")]
 pub(crate) use context::register_pyo3;
+
+#[cfg(feature = "async")]
+pub mod context_async;
+#[cfg(feature = "async")]
 pub use context_async::BaseContextAsync;
 
 /// Higher level enum for supported modules for a given command.

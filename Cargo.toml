@@ -11,8 +11,9 @@ default = ["sync"]
 
 pyo3-ext = ["pyo3/extension-module"]
 
-sync = ["pyo3-ext", "dep:pyo3", "dep:serial2"]
+sync = ["dep:serial2"]
 async = ["dep:tokio", "dep:serial2-tokio"]
+python = ["dep:pyo3", "pyo3-ext", "sync"]
 
 [dependencies]
 bytes = "1.10.1"

@@ -5,7 +5,7 @@ use crate::config::*;
 pub mod context;
 #[cfg(feature = "sync")]
 pub use context::BaseContext;
-#[cfg(feature = "sync")]
+#[cfg(feature = "python")]
 pub(crate) use context::register_pyo3;
 
 #[cfg(feature = "async")]

@@ -1,12 +1,16 @@
 // Defines types and functionality related to the base controller
 use super::*;
 use crate::{BaseResult, Error, transport::*};
+
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
+
 use std::{net::Ipv4Addr, str::FromStr};
 
 /// Abstract, central representation of the Controller.
 #[derive(Debug)]
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
+#[cfg(feature = "sync")]
 pub struct BaseContext {
     /// Mode used to connect to the controller
     op_mode: ControllerOpMode,
@@ -150,7 +154,7 @@ impl BaseContext {
 // Contains methods that are externally accessible from Rust and Python (without extension)
 // along with PRIVATE methods (Rust) that extended externally accessible Rust methods
 // that are not directly compatible with Python.
-#[pymethods]
+#[cfg_attr(feature = "python", pymethods)]
 impl BaseContext {
     /// Returns the firmware version of the controller and updates internal value.
     pub fn get_fw_version(&mut self) -> BaseResult<String> {
@@ -702,6 +706,7 @@ impl BaseContext {
 
 /// Used to register all types that are to be accessible
 /// via Python with the centralized PyModule
+#[cfg(feature = "python")]
 pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BaseContext>()?;
     Ok(())

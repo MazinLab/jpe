@@ -53,10 +53,10 @@ pub use builder::BaseContextBuilder;
 pub use config::{Direction, IpAddrMode, ModuleChannel, SerialInterface, SetpointPosMode, Slot};
 pub mod config;
 
-#[cfg(feature = "sync")]
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-#[cfg(feature = "sync")]
+#[cfg(feature = "python")]
 mod python_ffi;
 
 /// Errors for the base controller api
@@ -91,7 +91,7 @@ pub enum Error {
 pub type BaseResult<T> = std::result::Result<T, Error>;
 
 // Define the Python module that exposes Pyo3 API to python users.
-#[cfg(feature = "sync")] 
+#[cfg(feature = "python")]
 #[pymodule]
 #[pyo3(name = "jpe_python_ffi")]
 fn py_module(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {

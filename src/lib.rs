@@ -44,7 +44,6 @@ use std::{
     str::Utf8Error,
 };
 
-use pyo3::prelude::*;
 use thiserror::Error;
 
 pub mod base;
@@ -53,6 +52,11 @@ pub(crate) mod transport;
 pub use builder::BaseContextBuilder;
 pub use config::{Direction, IpAddrMode, ModuleChannel, SerialInterface, SetpointPosMode, Slot};
 pub mod config;
+
+#[cfg(feature = "sync")]
+use pyo3::prelude::*;
+
+#[cfg(feature = "sync")]
 mod python_ffi;
 
 /// Errors for the base controller api
@@ -87,6 +91,7 @@ pub enum Error {
 pub type BaseResult<T> = std::result::Result<T, Error>;
 
 // Define the Python module that exposes Pyo3 API to python users.
+#[cfg(feature = "sync")] 
 #[pymodule]
 #[pyo3(name = "jpe_python_ffi")]
 fn py_module(py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {

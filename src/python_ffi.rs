@@ -7,7 +7,7 @@ use crate::{
     base::BaseContext,
     builder::{BaseContextBuilder, Init, Network, Serial},
     config::{
-        ControllerOpMode, Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
+        Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
         SetpointPosMode, Slot,
     },
 };
@@ -173,30 +173,6 @@ impl Module {
     #[classmethod]
     fn edm(_cls: &Bound<'_, PyType>) -> Self {
         Self::Edm
-    }
-    fn __str__(&self) -> PyResult<String> {
-        Ok(format!("{self}"))
-    }
-    fn __repr__(&self) -> PyResult<String> {
-        Ok(format!("{:?}", self))
-    }
-}
-#[pymethods]
-impl ControllerOpMode {
-    /// Returns instance (variant) Basedrive
-    #[classmethod]
-    fn base(_cls: &Bound<'_, PyType>) -> Self {
-        Self::Basedrive
-    }
-    /// Returns instance (variant) Servodrive
-    #[classmethod]
-    fn servo(_cls: &Bound<'_, PyType>) -> Self {
-        Self::Servodrive
-    }
-    /// Returns instance (variant) Flexdrive
-    #[classmethod]
-    fn flex(_cls: &Bound<'_, PyType>) -> Self {
-        Self::Flexdrive
     }
     fn __str__(&self) -> PyResult<String> {
         Ok(format!("{self}"))

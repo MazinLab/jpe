@@ -1,20 +1,32 @@
-pub(crate) mod connection;
-pub(crate) mod connection_async;
-pub(crate) use connection::Connection;
-pub(crate) use connection_async::ConnectionAsync;
+use std::{
+    fmt::Display,
+    io::{Read, Write},
+    time::Duration,
+};
 
 use crate::{
     BaseResult, Error,
     base::{ModeScope, ModuleScope},
 };
-use std::{
-    fmt::Display,
-    io::{Read, Write},
-    pin::Pin,
-    time::Duration,
+
+#[cfg(feature = "sync")] 
+pub(crate) mod connection;
+
+#[cfg(feature = "sync")] 
+pub(crate) use connection::Connection;
+
+#[cfg(feature = "async")] 
+pub(crate) mod connection_async;
+
+#[cfg(feature = "async")]
+pub(crate) use connection_async::ConnectionAsync;
+
+#[cfg(feature = "async")]
+use {
+    tokio::io::{AsyncRead, AsyncWrite},
+    std::pin::Pin
 };
 
-use tokio::io::{AsyncRead, AsyncWrite};
 
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const READ_CHUNK_SIZE: usize = 64;
@@ -63,7 +75,9 @@ pub(crate) trait BufClear: Read + Write {
     fn clear_input_buffer(&mut self) -> Result<(), Error>;
     fn clear_output_buffer(&mut self) -> Result<(), Error>;
 }
+
 // Async version of `BufClear` trait.
+#[cfg(feature = "async")]
 pub(crate) trait AsyncBufClear: AsyncRead + AsyncWrite + Unpin {
     fn clear_input_buffer(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
     fn clear_output_buffer(&mut self) -> impl Future<Output = Result<(), Error>> + Send;
@@ -76,6 +90,7 @@ pub(crate) trait Transport: std::fmt::Debug + Send + Sync {
 }
 /// Async version of `Transport` trait. Complexity due to async methods not being
 /// dyn compatible (Futures aren't Sized).
+#[cfg(feature = "async")]
 pub(crate) trait AsyncTransport: std::fmt::Debug + Send + Sync + Unpin {
     fn transact<'a>(
         &'a mut self,

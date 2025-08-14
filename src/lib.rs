@@ -12,6 +12,15 @@
 //! Only commands supported by the previously mentioned modules are implemented, PRs are welcome
 //! for adding support for other modules!
 //!
+//! # Features
+//! The crate has three features: `python`, `async`, and, the default, `sync`. `python` only exposes
+//! the python bindings tied to the `sync` version of the API (I.E. async in Python needs to be implemented by the
+//! user in Python). Using the crate from Rust with only the `python` feature enabled is not supported, `sync` and/or `async` should
+//! also be enabled.
+//! If Python bindings aren't needed, omitting the `python` feature will suppress any dependencies related to Python binding compliation,
+//! which should minimize build headaches and reduce binary size.
+//!
+//!
 //! # Example
 //! This example opens a connection to the controller using serial transport
 //! and queries for the supported cryo stage SKUs.

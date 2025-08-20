@@ -1,12 +1,14 @@
 //! Remote control of the JPE CPSC1 controller and associated modules.
 //!
-//! The `jpe` crate provides a Rust and Python implementation, via `PyO3`,
-//! for controlling and administering the CPSC1 controller and the following
-//! modules:
+//! The `jpe` crate provides a cross-platform, command-level driver for controlling and administering the [CPSC1](https://www.jpe-innovations.com/cryo-uhv-products/cryo-positioning-systems-controller/)
+//! controller, which drives various positioning stages available from [jpe](https://www.jpe-innovations.com/).
+//! Both Python and Rust applications are supported.
+//!
+//! Currently, only the following modules are supported:
 //! * RSM
 //! * CADM2
 //!
-//! Please view [API documentation](https://www.jpe-innovations.com/wp-content/uploads/CNP_MAN02_R05_Software-User-Manual.pdf)
+//! Please view the [API documentation](https://www.jpe-innovations.com/wp-content/uploads/CNP_MAN02_R05_Software-User-Manual.pdf)
 //! provided by JPE for more details.
 //!
 //! Only commands supported by the previously mentioned modules are implemented, PRs are welcome
@@ -23,7 +25,7 @@
 //!
 //! # Example
 //! This example opens a connection to the controller using serial transport
-//! and queries for the supported cryo stage SKUs.
+//! and queries for the supported positioning stage SKUs.
 //!
 //! ```no_run
 //! # fn example() -> std::io::Result<()> {
@@ -46,6 +48,35 @@
 //! let mut ctx = BaseContextBuilder::new().with_network("169.254.10.10").build()?;
 //! let _ = ctx.enable_scan_mode(Slot::One, 512)?;
 //! # }
+//! ```
+//! # Using Python
+//! To compile Python bindings and install as a module in the active virtual environment, the Python package [`maturin`](https://www.maturin.rs/) should
+//! be installed and used. After cloning the `jpe` repo, run the following shell command from the crate root
+//! (be sure to activate the appropriate virtual env):
+//!```no_run
+//! maturin develop --features python
+//!```
+//!
+//! The module should now be installed and can be used with the Python ecosystem. To help with type hints
+//! and docstrings in modern IDEs, an optional wrapper module, [`jpe_python`](https://github.com/MazinLab/jpe_python),
+//! can be used. Using this wrapper, the construction of the Controller context is more pythonic. If Rust builder ergonomics are
+//!  desired, one can forego the convenience given by the wrapper and use the FFI directly.
+//!
+//! # Example using the FFI directly
+//! ```python
+//! from jpe_python_ffi import BaseContextBuilder, Slot
+//!
+//! ctx = BaseContextBuilder().with_network("169.254.10.10").build()
+//! ctx.enable_scan_mode(Slot.one(), 512)
+//! ```
+//!
+//! # Example using the `jpe_python` wrapper module.
+//! Note the difference in syntax for the constructor and the enums passed as arguments.
+//! ```python
+//! from jpe_python import ControllerContext, ModuleChannel, Slot
+//!
+//! ctx = ControllerContext.with_serial("/dev/cu.usbserial-D30IYJT2")
+//! ctx.set_neg_end_stop(Slot().four, ModuleChannel().one)
 //! ```
 use std::{
     net::AddrParseError,

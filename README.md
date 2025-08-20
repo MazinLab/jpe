@@ -4,19 +4,20 @@
 Library enabling remote control of the JPE CPSC1 controller and associated modules over network and serial
 transport.
 
-The `jpe` crate provides a Rust and Python implementation, via `PyO3`,
-for controlling and administering the CPSC1 controller and the following
-modules:
+The `jpe` crate provides a cross-platform, command-level driver for controlling and administering the [Cryo Positioning Systems Controller (CPSC1)](https://www.jpe-innovations.com/cryo-uhv-products/cryo-positioning-systems-controller/), which is required to actuate various positioning stages available from [jpe](https://www.jpe-innovations.com/).
+Both Python and Rust applications are supported.
+
+Currently, only the following function specific modules are supported:
 * RSM
 * CADM2
 
-Please view [API documentation](https://www.jpe-innovations.com/wp-content/uploads/CNP_MAN02_R05_Software-User-Manual.pdf)
+Please view the [API documentation](https://www.jpe-innovations.com/wp-content/uploads/CNP_MAN02_R05_Software-User-Manual.pdf)
 provided by JPE for more details.
 
 Only commands supported by the previously mentioned modules are implemented, PRs are welcome
 for adding support for other modules!
 
-# Example
+# Rust Example
 This example opens a connection to the controller using serial transport
 and queries for the supported cryo stage SKUs.
 
@@ -52,7 +53,7 @@ let _ = ctx.enable_scan_mode(Slot::One, 512)?;
  can be used. Using this wrapper, the construction of the Controller context is more pythonic. If Rust builder ergonomics are
   desired, one can forego the convenience given by the wrapper and use the FFI directly.
 
- # Example using the FFI directly
+ ## Using the FFI directly
  ```python
  from jpe_python_ffi import BaseContextBuilder, Slot
 
@@ -60,7 +61,7 @@ let _ = ctx.enable_scan_mode(Slot::One, 512)?;
  ctx.enable_scan_mode(Slot.one(), 512)
  ```
 
- # Example using the `jpe_python` wrapper module.
+ ## Using the `jpe_python` wrapper module.
  Note the difference in syntax for the constructor and the enums passed as arguments.
  ```python
  from jpe_python import ControllerContext, ModuleChannel, Slot

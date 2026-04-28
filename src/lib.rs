@@ -79,6 +79,7 @@
 //! ctx.set_neg_end_stop(Slot().four, ModuleChannel().one)
 //! ```
 use std::{
+    error,
     net::AddrParseError,
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
@@ -99,7 +100,7 @@ use pyo3::prelude::*;
 #[cfg(feature = "python")]
 mod python_ffi;
 
-/// Errors for the base controller api
+/// Error variant returned when the controller receives an unknown command or invalid arguments.
 #[derive(Error, Debug)]
 pub enum DeviceErrorKind {
     #[error("Unknown Command")]
@@ -112,9 +113,31 @@ pub enum DeviceErrorKind {
     MissingStageAxis,
     #[error("Invalid stage name")]
     InvalidStageName,
+    #[error("{0}")]
+    Other(String),
 }
+impl DeviceErrorKind {
+    pub fn from_str(s: &mut str) -> Self {
+        let s = s.to_ascii_uppercase();
+        if s.contains("UNKNOWN COMMAND") {
+            Self::UnknownCmd
+        } else if s.contains("ONE OR MORE ARGUMENTS ARE INVALID") {
+            Self::InvalidArg
+        } else if s.contains("INCORRECT NUMBER OF ARGUMENTS") {
+            Self::InvalidArgNum
+        } else if s.contains("AXIS") {
+            Self::MissingStageAxis
+        } else if s.contains("NAME") {
+            Self::InvalidStageName
+        } else {
+            Self::Other(s)
+        }
+    }
+}
+/// Error variant returned when a CADM2 module failsafe has been triggered and the
+/// failsafe state has been polled.
 #[derive(Error, Debug)]
-pub enum DeviceFailsafeKind {
+pub enum CadmFailsafeKind {
     #[error("Upper voltage rail missing, reset required.")]
     UpperVoltageRailMissing,
     #[error("Lower voltage rail missing, reset required.")]

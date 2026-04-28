@@ -1,6 +1,6 @@
 // Defines types and functionality related to the base controller
 use super::*;
-use crate::{BaseResult, Error, transport::*};
+use crate::{BaseResult, DeviceErrorKind, Error, transport::*};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -91,9 +91,9 @@ impl BaseContext {
         // Check to verify if command is valid
         self.check_command(cmd, slot)?;
 
-        let resp = self.conn.transact(&cmd)?;
+        let mut resp = self.conn.transact(&cmd)?;
         match resp {
-            Frame::Error(s) => Err(Error::DeviceError(s)),
+            Frame::Error(ref mut s) => Err(Error::DeviceError(DeviceErrorKind::from_str(s))),
             Frame::CrDelimited(v) | Frame::CommaDelimited(v) => {
                 if let Some(n_vals) = n_resp_vals {
                     if v.len() != n_vals {
@@ -302,7 +302,7 @@ impl BaseContext {
 
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
 
         // Create the command and send to controller
@@ -384,7 +384,7 @@ impl BaseContext {
 
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
 
         // Create the command and send to controller
@@ -410,7 +410,7 @@ impl BaseContext {
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -429,23 +429,15 @@ impl BaseContext {
         stage_ch3: &str,
     ) -> BaseResult<(f32, f32, f32)> {
         // Get supported stages and see if passed stage values are supported.
-        if !self.check_stage(stage_ch1)? {
-            return Err(Error::DeviceError(format!(
-                "Stage {} unsupported",
-                stage_ch1
-            )));
-        }
-        if !self.check_stage(stage_ch2)? {
-            return Err(Error::DeviceError(format!(
-                "Stage {} unsupported",
-                stage_ch2
-            )));
-        }
-        if !self.check_stage(stage_ch3)? {
-            return Err(Error::DeviceError(format!(
-                "Stage {} unsupported",
-                stage_ch3
-            )));
+        if [
+            !self.check_stage(stage_ch1)?,
+            !self.check_stage(stage_ch2)?,
+            !self.check_stage(stage_ch3)?,
+        ]
+        .iter()
+        .any(|s| *s)
+        {
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -492,7 +484,7 @@ impl BaseContext {
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -512,7 +504,7 @@ impl BaseContext {
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -601,14 +593,15 @@ impl BaseContext {
         }
 
         // Get supported stages and see if passed stage values are supported.
-        if !self.check_stage(stage_1)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_1)));
-        }
-        if !self.check_stage(stage_2)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_2)));
-        }
-        if !self.check_stage(stage_3)? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_3)));
+        if [
+            !self.check_stage(stage_1)?,
+            !self.check_stage(stage_2)?,
+            !self.check_stage(stage_3)?,
+        ]
+        .iter()
+        .any(|s| *s)
+        {
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Any,

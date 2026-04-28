@@ -101,6 +101,37 @@ mod python_ffi;
 
 /// Errors for the base controller api
 #[derive(Error, Debug)]
+pub enum DeviceErrorKind {
+    #[error("Unknown Command")]
+    UnknownCmd,
+    #[error("One or more arguments are invalid")]
+    InvalidArg,
+    #[error("Invalid number of arguments")]
+    InvalidArgNum,
+    #[error("Stage axis is undefined")]
+    MissingStageAxis,
+    #[error("Invalid stage name")]
+    InvalidStageName,
+}
+#[derive(Error, Debug)]
+pub enum DeviceFailsafeKind {
+    #[error("Upper voltage rail missing, reset required.")]
+    UpperVoltageRailMissing,
+    #[error("Lower voltage rail missing, reset required.")]
+    LowerVoltageRailMissing,
+    #[error("Thermal overload of amplification stage. Let unit cool down.")]
+    ThermalOverload,
+    #[error("Upper voltage rail overcurrent: I>10A, t>100us, reset required.")]
+    UpperVoltageRailHighCurrent10A,
+    #[error("Upper voltage rail overcurrent: I>150mA, t>1ms, reset required.")]
+    UpperVoltageRailHighCurrent150mA,
+    #[error("Lower voltage rail overcurrent: I>10A, t>100us, reset required.")]
+    LowerVoltageRailHighCurrent10A,
+    #[error("Lower voltage rail overcurrent: I>150mA, t>1ms, reset required.")]
+    LowerVoltageRailHighCurrent150mA,
+}
+
+#[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),

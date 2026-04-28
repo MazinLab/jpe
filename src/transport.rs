@@ -9,13 +9,13 @@ use crate::{
     base::{ModeScope, ModuleScope},
 };
 
-#[cfg(feature = "sync")] 
+#[cfg(feature = "sync")]
 pub(crate) mod connection;
 
-#[cfg(feature = "sync")] 
+#[cfg(feature = "sync")]
 pub(crate) use connection::Connection;
 
-#[cfg(feature = "async")] 
+#[cfg(feature = "async")]
 pub(crate) mod connection_async;
 
 #[cfg(feature = "async")]
@@ -23,10 +23,9 @@ pub(crate) use connection_async::ConnectionAsync;
 
 #[cfg(feature = "async")]
 use {
+    std::pin::Pin,
     tokio::io::{AsyncRead, AsyncWrite},
-    std::pin::Pin
 };
-
 
 const READ_TIMEOUT: Duration = Duration::from_millis(500);
 const READ_CHUNK_SIZE: usize = 64;
@@ -36,8 +35,10 @@ const TERMINATOR: &'static str = "\r\n";
 /// A framed response received from the controller.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Frame {
-    /// Error responses, begins with "Error"
+    /// Begins with "Error". Signals an error with the previously sent command.
     Error(String),
+    /// Begins with "ERROR:". Signals a failsafe error with a CADM2 module.
+    ErrorFailsafe(String),
     /// Carriage return delimited responses (currently a bug)
     CrDelimited(Vec<String>),
     /// Normal, non-Error responses delimited by commas

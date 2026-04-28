@@ -1,6 +1,6 @@
 // Defines types and functionality related to the base controller
 use super::*;
-use crate::{BaseResult, DeviceErrorKind, Error, transport::*};
+use crate::{BaseResult, CadmFailsafeKind, DeviceErrorKind, Error, transport::*};
 
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
@@ -91,9 +91,10 @@ impl BaseContext {
         // Check to verify if command is valid
         self.check_command(cmd, slot)?;
 
-        let mut resp = self.conn.transact(&cmd)?;
+        let resp = self.conn.transact(&cmd)?;
         match resp {
-            Frame::Error(ref mut s) => Err(Error::DeviceError(DeviceErrorKind::from_str(s))),
+            Frame::ErrorFailsafe(s) => Err(Error::CadmFailsafe(CadmFailsafeKind::from_string(s))),
+            Frame::Error(s) => Err(Error::DeviceError(DeviceErrorKind::from_string(s))),
             Frame::CrDelimited(v) | Frame::CommaDelimited(v) => {
                 if let Some(n_vals) = n_resp_vals {
                     if v.len() != n_vals {

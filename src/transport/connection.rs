@@ -30,9 +30,14 @@ where
             .strip_suffix(TERMINATOR)
             .ok_or(Error::InvalidResponse("Terminator not found".to_string()))?;
 
-        // Error case returns early
+        // Command error case returns early
         if msg.starts_with("Error") {
             return Ok(Frame::Error(msg.to_string()));
+        }
+
+        // Failsafe error case returns early
+        if msg.starts_with("ERROR:") {
+            return Ok(Frame::ErrorFailsafe(msg.to_string()));
         }
 
         match msg.chars().filter(|c| *c == '\r').count() {

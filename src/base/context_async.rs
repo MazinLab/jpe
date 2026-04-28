@@ -1,7 +1,7 @@
 /*  Defines types and functionality related to the base controller in an async context */
 
 use super::*;
-use crate::{BaseResult, Error, transport::*};
+use crate::{BaseResult, CadmFailsafeKind, DeviceErrorKind, Error, transport::*};
 use std::{net::Ipv4Addr, str::FromStr};
 
 /// Abstract, central representation of the Controller.
@@ -86,7 +86,8 @@ impl BaseContextAsync {
 
         let resp = self.conn.transact(&cmd).await?;
         match resp {
-            Frame::Error(s) => Err(Error::DeviceError(s)),
+            Frame::ErrorFailsafe(s) => Err(Error::CadmFailsafe(CadmFailsafeKind::from_string(s))),
+            Frame::Error(s) => Err(Error::DeviceError(DeviceErrorKind::from_string(s))),
             Frame::CrDelimited(v) | Frame::CommaDelimited(v) => {
                 if let Some(n_vals) = n_resp_vals {
                     if v.len() != n_vals {
@@ -273,7 +274,7 @@ impl BaseContextAsync {
 
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
 
         // Create the command and send to controller
@@ -355,7 +356,7 @@ impl BaseContextAsync {
 
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
 
         // Create the command and send to controller
@@ -381,7 +382,7 @@ impl BaseContextAsync {
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -400,23 +401,15 @@ impl BaseContextAsync {
         stage_ch3: &str,
     ) -> BaseResult<(f32, f32, f32)> {
         // Get supported stages and see if passed stage values are supported.
-        if !self.check_stage(stage_ch1).await? {
-            return Err(Error::DeviceError(format!(
-                "Stage {} unsupported",
-                stage_ch1
-            )));
-        }
-        if !self.check_stage(stage_ch2).await? {
-            return Err(Error::DeviceError(format!(
-                "Stage {} unsupported",
-                stage_ch2
-            )));
-        }
-        if !self.check_stage(stage_ch3).await? {
-            return Err(Error::DeviceError(format!(
-                "Stage {} unsupported",
-                stage_ch3
-            )));
+        if [
+            !self.check_stage(stage_ch1)?,
+            !self.check_stage(stage_ch2)?,
+            !self.check_stage(stage_ch3)?,
+        ]
+        .iter()
+        .any(|s| *s)
+        {
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -464,7 +457,7 @@ impl BaseContextAsync {
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -484,7 +477,7 @@ impl BaseContextAsync {
     ) -> BaseResult<f32> {
         // Get supported stages and see if passed stage value is supported.
         if !self.check_stage(stage).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage)));
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Only(vec![Module::Rsm]),
@@ -573,14 +566,15 @@ impl BaseContextAsync {
         }
 
         // Get supported stages and see if passed stage values are supported.
-        if !self.check_stage(stage_1).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_1)));
-        }
-        if !self.check_stage(stage_2).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_2)));
-        }
-        if !self.check_stage(stage_3).await? {
-            return Err(Error::DeviceError(format!("Stage {} unsupported", stage_3)));
+        if [
+            !self.check_stage(stage_1)?,
+            !self.check_stage(stage_2)?,
+            !self.check_stage(stage_3)?,
+        ]
+        .iter()
+        .any(|s| *s)
+        {
+            return Err(Error::DeviceError(DeviceErrorKind::InvalidStageName));
         }
         let cmd = Command::new(
             ModuleScope::Any,

@@ -34,6 +34,10 @@ where
         if msg.starts_with("Error") {
             return Ok(Frame::Error(msg.to_string()));
         }
+        // Failsafe error case returns early
+        if msg.starts_with("ERROR:") {
+            return Ok(Frame::ErrorFailsafe(msg.to_string()));
+        }
 
         match msg.chars().filter(|c| *c == '\r').count() {
             // Comma-delimited case when there is only one carriage return in the
@@ -79,7 +83,7 @@ where
                     }
                 }
                 // Read timer elapsed
-                Err(_) => break
+                Err(_) => break,
             }
         }
         Ok(())

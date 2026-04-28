@@ -152,14 +152,14 @@ pub enum CadmFailsafeKind {
     LowerVoltageRailHighCurrent10A,
     #[error("Lower voltage rail overcurrent: I>150mA, t>1ms, reset required.")]
     LowerVoltageRailHighCurrent150mA,
+    #[error("{0}")]
+    Other(String),
 }
 
 #[derive(Error, Debug)]
 pub enum Error {
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("Device not found.")]
-    DeviceNotFound,
     #[error("{0}")]
     InvalidParams(String),
     #[error("{0}")]
@@ -172,8 +172,10 @@ pub enum Error {
     Bound(String),
     #[error(transparent)]
     Utf8(#[from] Utf8Error),
-    #[error("{0}")]
-    DeviceError(String),
+    #[error(transparent)]
+    DeviceError(#[from] DeviceErrorKind),
+    #[error(transparent)]
+    CadmFailsafe(#[from] CadmFailsafeKind),
     #[error(transparent)]
     ParseIntError(#[from] ParseIntError),
     #[error(transparent)]

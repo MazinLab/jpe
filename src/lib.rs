@@ -79,7 +79,6 @@
 //! ctx.set_neg_end_stop(Slot().four, ModuleChannel().one)
 //! ```
 use std::{
-    error,
     net::AddrParseError,
     num::{ParseFloatError, ParseIntError},
     str::Utf8Error,
@@ -117,7 +116,7 @@ pub enum DeviceErrorKind {
     Other(String),
 }
 impl DeviceErrorKind {
-    pub fn from_str(s: &mut str) -> Self {
+    pub fn from_string(s: String) -> Self {
         let s = s.to_ascii_uppercase();
         if s.contains("UNKNOWN COMMAND") {
             Self::UnknownCmd
@@ -154,6 +153,28 @@ pub enum CadmFailsafeKind {
     LowerVoltageRailHighCurrent150mA,
     #[error("{0}")]
     Other(String),
+}
+impl CadmFailsafeKind {
+    pub fn from_string(s: String) -> Self {
+        let s = s.to_ascii_uppercase();
+        if s.contains("UPPER") && s.contains("MISSING") {
+            Self::UpperVoltageRailMissing
+        } else if s.contains("LOWER") && s.contains("MISSING") {
+            Self::LowerVoltageRailMissing
+        } else if s.contains("THERMAL") {
+            Self::ThermalOverload
+        } else if s.contains("UPPER") && s.contains("10A") {
+            Self::UpperVoltageRailHighCurrent10A
+        } else if s.contains("UPPER") && s.contains("0.15A") {
+            Self::UpperVoltageRailHighCurrent150mA
+        } else if s.contains("LOWER") && s.contains("10A") {
+            Self::LowerVoltageRailHighCurrent10A
+        } else if s.contains("LOWER") && s.contains("0.15A") {
+            Self::LowerVoltageRailHighCurrent150mA
+        } else {
+            Self::Other(s)
+        }
+    }
 }
 
 #[derive(Error, Debug)]

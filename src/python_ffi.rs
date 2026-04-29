@@ -7,15 +7,22 @@ use crate::{
     base::BaseContext,
     builder::{BaseContextBuilder, Init, Network, Serial},
     config::{
-        Direction, IpAddrMode, Module, ModuleChannel, SerialInterface,
-        SetpointPosMode, Slot,
+        Direction, IpAddrMode, Module, ModuleChannel, SerialInterface, SetpointPosMode, Slot,
     },
 };
-use pyo3::exceptions::{
-    PyException, PyIOError, PyOverflowError, PyRuntimeError, PyUnicodeError, PyValueError,
-};
+use pyo3::create_exception;
+use pyo3::exceptions::{PyException, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
+
+// JPE base exception
+create_exception!(jpe_module, JpeError, PyException, "Base JPE API Exception");
+
+// JPE exception subclasses
+create_exception!(jpe_module, JpeHardwareError, JpeError);
+create_exception!(jpe_module, JpeConnectionError, JpeError);
+create_exception!(jpe_module, JpeConfigError, JpeError);
+create_exception!(jpe_module, JpeParseError, JpeError);
 
 // ======= Error Mapping =======
 // Define mapping between the crate local custom Error variants and Python
@@ -23,20 +30,22 @@ use pyo3::types::PyType;
 impl From<Error> for PyErr {
     fn from(e: Error) -> Self {
         match e {
-            Error::Io(e) => PyIOError::new_err(e.to_string()),
-            Error::DeviceNotFound => PyException::new_err("Device not found"),
-            Error::InvalidParams(s) => PyValueError::new_err(s),
-            Error::InvalidResponse(s) => PyValueError::new_err(s),
-            Error::Other(s) => PyException::new_err(s),
-            Error::BufOverflow { max_len, idx } => {
-                PyOverflowError::new_err(format!("Buffer overflow, max: {}, idx: {}", max_len, idx))
-            }
-            Error::Bound(s) => PyValueError::new_err(s),
-            Error::Utf8(e) => PyUnicodeError::new_err(e),
-            Error::DeviceError(s) => PyException::new_err(format!("Device Error: {}", s)),
-            Error::ParseIntError(e) => PyValueError::new_err(e),
-            Error::ParseFloatError(e) => PyValueError::new_err(e),
-            Error::AddrParseError(e) => PyValueError::new_err(e),
+            Error::Io(e) => JpeConnectionError::new_err(e.to_string()),
+            Error::BufOverflow { max_len, idx } => JpeConnectionError::new_err(format!(
+                "Rx buffer overflow, max: {}, got: {}",
+                max_len, idx
+            )),
+            Error::InvalidParams(s) => JpeConfigError::new_err(s),
+            Error::DeviceError(e) => JpeConfigError::new_err(e.to_string()),
+            Error::CadmFailsafe(e) => JpeHardwareError::new_err(e.to_string()),
+            Error::InvalidResponse(s) => JpeParseError::new_err(s),
+            Error::Other(s) => JpeError::new_err(s),
+
+            Error::Bound(s) => JpeConfigError::new_err(s),
+            Error::Utf8(e) => JpeParseError::new_err(e),
+            Error::ParseIntError(e) => JpeParseError::new_err(e),
+            Error::ParseFloatError(e) => JpeParseError::new_err(e),
+            Error::AddrParseError(e) => JpeConfigError::new_err(e),
         }
     }
 }
@@ -350,5 +359,13 @@ pub(crate) fn register_pyo3(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()
     m.add_class::<PyBuilderInit>()?;
     m.add_class::<PyBaseBuilderSerial>()?;
     m.add_class::<PyBaseBuilderNetwork>()?;
+    m.add("JpeError", m.py().get_type::<JpeError>())?;
+    m.add("JpeHardwareError", m.py().get_type::<JpeHardwareError>())?;
+    m.add(
+        "JpeConnectionError",
+        m.py().get_type::<JpeConnectionError>(),
+    )?;
+    m.add("JpeConfigError", m.py().get_type::<JpeConfigError>())?;
+    m.add("JpeParseError", m.py().get_type::<JpeParseError>())?;
     Ok(())
 }

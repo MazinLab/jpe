@@ -402,9 +402,9 @@ impl BaseContextAsync {
     ) -> BaseResult<(f32, f32, f32)> {
         // Get supported stages and see if passed stage values are supported.
         if [
-            !self.check_stage(stage_ch1)?,
-            !self.check_stage(stage_ch2)?,
-            !self.check_stage(stage_ch3)?,
+            !self.check_stage(stage_ch1).await?,
+            !self.check_stage(stage_ch2).await?,
+            !self.check_stage(stage_ch3).await?,
         ]
         .iter()
         .any(|s| *s)
@@ -567,9 +567,9 @@ impl BaseContextAsync {
 
         // Get supported stages and see if passed stage values are supported.
         if [
-            !self.check_stage(stage_1)?,
-            !self.check_stage(stage_2)?,
-            !self.check_stage(stage_3)?,
+            !self.check_stage(stage_1).await?,
+            !self.check_stage(stage_2).await?,
+            !self.check_stage(stage_3).await?,
         ]
         .iter()
         .any(|s| *s)
